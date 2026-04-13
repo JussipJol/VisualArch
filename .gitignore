@@ -23,5 +23,5 @@ tsconfig.tsbuildinfo
 
 .DS_Store
 *.pem
-
+.openclaude-profile.json
 .eslintcache

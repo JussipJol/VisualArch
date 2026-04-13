@@ -95,14 +95,17 @@ export class CreditsService {
     return CREDITS_COSTS.GENERATE_LARGE;
   }
 
-  resetMonthlyCredits(userId: string): void {
-    const user = store.findUserById(userId);
+  async resetMonthlyCredits(userId: string): Promise<void> {
+    const user = await UserModel.findById(userId);
     if (!user) return;
 
     const monthlyCredits = PLAN_CREDITS[user.plan];
-    user.creditsBalance = monthlyCredits;
-    user.creditsResetDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    store.saveUser(user);
+    await UserModel.findByIdAndUpdate(userId, {
+      $set: {
+        creditsBalance: monthlyCredits,
+        creditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      }
+    });
   }
 }
 

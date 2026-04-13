@@ -1,15 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { store } from '../models/store';
 import { authenticateJWT } from '../middleware/auth';
 import { creditsService } from '../services/credits.service';
+import { UserModel } from '../models/schemas/User.schema';
+import { NotificationModel } from '../models/schemas/Notification.schema';
 
 const creditsRouter = Router();
 const notifRouter = Router();
 
 // GET /api/credits/balance
-creditsRouter.get('/balance', authenticateJWT, (req: Request, res: Response) => {
-  const { balance, plan, history } = creditsService.getBalance(req.user!.userId);
-  const user = store.findUserById(req.user!.userId);
+creditsRouter.get('/balance', authenticateJWT, async (req: Request, res: Response) => {
+  const { balance, plan, history } = await creditsService.getBalance(req.user!.userId);
+  const user = await UserModel.findById(req.user!.userId);
 
   return res.json({
     data: {
@@ -36,43 +37,54 @@ creditsRouter.post('/purchase', authenticateJWT, async (req: Request, res: Respo
 
   // In production: create Stripe checkout session
   // For demo: directly add credits
-  creditsService.addCredits(req.user!.userId, selected.credits, 'purchase', {
+  await creditsService.addCredits(req.user!.userId, selected.credits, 'purchase', {
     package: pkg,
     price: selected.price,
     stripeSessionId: 'demo_' + Date.now(),
   });
 
+  const user = await UserModel.findById(req.user!.userId);
+
   return res.json({
     data: {
       creditsAdded: selected.credits,
-      newBalance: store.findUserById(req.user!.userId)?.creditsBalance,
+      newBalance: user?.creditsBalance,
       // In production: checkoutUrl: stripeSession.url
     },
   });
 });
 
 // GET /api/notifications
-notifRouter.get('/', authenticateJWT, (req: Request, res: Response) => {
+notifRouter.get('/', authenticateJWT, async (req: Request, res: Response) => {
   const page = parseInt(String(req.query.page ?? '1'));
   const limit = parseInt(String(req.query.limit ?? '20'));
 
-  const notifications = store.getNotifications(req.user!.userId);
-  const start = (page - 1) * limit;
-  const paginated = notifications.slice(start, start + limit);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const skip = (page - 1) * limit;
+  
+  const [notifications, total, unreadCount] = await Promise.all([
+    NotificationModel.find({ userId: req.user!.userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    NotificationModel.countDocuments({ userId: req.user!.userId }),
+    NotificationModel.countDocuments({ userId: req.user!.userId, read: false })
+  ]);
 
   return res.json({
-    data: paginated,
+    data: notifications,
     unreadCount,
-    total: notifications.length,
+    total,
     page,
-    pages: Math.ceil(notifications.length / limit),
+    pages: Math.ceil(total / limit),
   });
 });
 
 // POST /api/notifications/read-all
-notifRouter.post('/read-all', authenticateJWT, (req: Request, res: Response) => {
-  store.markAllNotificationsRead(req.user!.userId);
+notifRouter.post('/read-all', authenticateJWT, async (req: Request, res: Response) => {
+  await NotificationModel.updateMany(
+    { userId: req.user!.userId, read: false },
+    { $set: { read: true } }
+  );
   return res.json({ message: 'All notifications marked as read' });
 });
 

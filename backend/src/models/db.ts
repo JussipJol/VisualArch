@@ -11,6 +11,9 @@ export async function connectDatabase(): Promise<void> {
   try {
     const conn = await mongoose.connect(MONGODB_URI, {
       autoIndex: true,
+      maxPoolSize: 10,
+      socketTimeoutMS: 45000,
+      serverSelectionTimeoutMS: 5000,
     });
     console.log(`\n✅ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {

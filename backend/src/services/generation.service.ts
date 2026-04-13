@@ -607,10 +607,10 @@ export class GenerationService {
 
       onEvent?.('planning_done', { node_count: nodes.length, tech_stack: techStack });
 
-      // Stage 2: Coding (Per Node)
+      // Stage 2: Coding (Parallel)
       onEvent?.('coding_start', { total: nodes.length });
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
+      
+      await Promise.all(nodes.map(async (node, i) => {
         onEvent?.('coding_node', { id: node.id, label: node.label, index: i + 1, total: nodes.length });
         
         const codePrompt = `
@@ -624,7 +624,7 @@ export class GenerationService {
         node.files = codeResult.files;
         
         onEvent?.('node_done', { id: node.id, label: node.label, file_count: node.files.length });
-      }
+      }));
 
       // Stage 3: Critique (LLM)
       onEvent?.('critique_start', {});
@@ -679,6 +679,25 @@ export class GenerationService {
     
     onEvent?.('complete', { architecture_data: architectureData, credits_used: creditsUsed });
     return { architectureData, criticFeedback, totalTimeMs, creditsUsed, modelUsed: 'mock-engine' };
+  }
+
+  async generateCICDConfig(workspaceId: string, techStack: string[], platform: string): Promise<string> {
+    if (!groqAdapter.isEnabled) {
+      await MOCK_DELAY(1000);
+      return `# Mock CI/CD for ${platform}\n# Tech Stack: ${techStack.join(', ')}\n\nversion: 1.0\nsteps:\n  - build: npm run build\n  - test: npm test\n  - deploy: # TODO: add ${platform} credentials`;
+    }
+
+    const prompt = `
+      Generate a professional CI/CD configuration (YAML) for the following workspace:
+      Workspace ID: ${workspaceId}
+      Tech Stack: ${techStack.join(', ')}
+      Target Platform: ${platform}
+      
+      Include steps for build, test, and deployment to ${platform}.
+      Return ONLY the YAML content without markdown blocks.
+    `;
+
+    return groqAdapter.generateText(prompt, undefined, undefined);
   }
 
   async generateADR(workspaceId: string, nodeLabel: string, context: string): Promise<{

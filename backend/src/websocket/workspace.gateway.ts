@@ -3,7 +3,11 @@ import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { JWTPayload } from '../types';
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'visualarch_jwt_secret_dev_2025';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET not found in environment. WebSocket server will fail.');
+}
 
 interface UserPresence {
   userId: string;
@@ -52,6 +56,41 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
 
   const workspaceNamespace = io.of('/workspace');
 
+  // Per-workspace broadcast intervals
+  const broadcastIntervals = new Map<string, NodeJS.Timeout>();
+
+  function startBroadcasting(workspaceId: string) {
+    if (broadcastIntervals.has(workspaceId)) return;
+
+    const interval = setInterval(() => {
+      const session = workspaceSessions.get(workspaceId);
+      if (!session || session.size === 0) {
+        stopBroadcasting(workspaceId);
+        return;
+      }
+
+      const cursors = Object.fromEntries(
+        Array.from(session.entries())
+          .filter(([, p]) => p.cursor)
+          .map(([, p]) => [p.userId, p.cursor])
+      );
+
+      if (Object.keys(cursors).length > 0) {
+        workspaceNamespace.to(workspaceId).emit('cursors_update', { cursors });
+      }
+    }, 50);
+
+    broadcastIntervals.set(workspaceId, interval);
+  }
+
+  function stopBroadcasting(workspaceId: string) {
+    const interval = broadcastIntervals.get(workspaceId);
+    if (interval) {
+      clearInterval(interval);
+      broadcastIntervals.delete(workspaceId);
+    }
+  }
+
   workspaceNamespace.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
@@ -92,6 +131,9 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
 
       session.set(socket.id, presence);
 
+      // Start broadcasting for this workspace if not already
+      startBroadcasting(workspaceId);
+
       // Send current participants to newcomer
       socket.emit('room_state', {
         participants: Array.from(session.values()),
@@ -114,21 +156,6 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
         presence.cursor = { x, y, nodeId };
       }
     });
-
-    // START BATCHED BROADCAST FOR CURSORS
-    const broadcastInterval = setInterval(() => {
-      if (!currentWorkspaceId) return;
-      const session = workspaceSessions.get(currentWorkspaceId);
-      if (!session || session.size === 0) return;
-
-      const cursors = Object.fromEntries(
-        Array.from(session.entries())
-          .filter(([, p]) => p.cursor)
-          .map(([, p]) => [p.userId, p.cursor])
-      );
-
-      workspaceNamespace.to(currentWorkspaceId).emit('cursors_update', { cursors });
-    }, 50); // 20Hz update rate is plenty for smooth cursors while saving 80% bandwidth
 
     // NODE SELECTED
     socket.on('node_selected', ({ nodeId }: { nodeId: string }) => {
@@ -186,7 +213,6 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
 
     // DISCONNECT
     socket.on('disconnect', () => {
-      clearInterval(broadcastInterval);
       if (currentWorkspaceId) {
         const session = workspaceSessions.get(currentWorkspaceId);
         if (session) {
@@ -198,6 +224,7 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
           }
 
           if (session.size === 0) {
+            stopBroadcasting(currentWorkspaceId);
             workspaceSessions.delete(currentWorkspaceId);
           }
         }

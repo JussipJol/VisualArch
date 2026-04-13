@@ -19,7 +19,7 @@ yarn-error.log*
 
 
 tsconfig.tsbuildinfo
-
+.openclaude-profile.json
 
 .DS_Store
 *.pem

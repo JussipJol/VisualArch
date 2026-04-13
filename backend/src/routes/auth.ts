@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { store } from '../models/store';
 import { authenticateJWT } from '../middleware/auth';
 import { User, JWTPayload } from '../types';
 import { PLAN_CREDITS } from '../services/credits.service';
@@ -13,8 +12,12 @@ import { RefreshTokenModel } from '../models/schemas/RefreshToken.schema';
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'visualarch_jwt_secret_dev_2025';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'visualarch_refresh_secret_dev_2025';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+
+if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+  console.error('❌ FATAL: JWT secrets not found in environment. Auth will fail.');
+}
 
 function generateAccessToken(payload: JWTPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });

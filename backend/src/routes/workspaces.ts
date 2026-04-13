@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { authenticateJWT, requireWorkspaceMember } from '../middleware/auth';
 import { requireOwner } from '../middleware/rbac';
@@ -11,6 +10,8 @@ import { WorkspaceModel } from '../models/schemas/Workspace.schema';
 import { ADRModel } from '../models/schemas/ADR.schema';
 import { NotificationModel } from '../models/schemas/Notification.schema';
 import { UserModel } from '../models/schemas/User.schema';
+import { HistoryModel } from '../models/schemas/History.schema';
+import { CommentModel } from '../models/schemas/Comment.schema';
 
 const router = Router();
 
@@ -134,7 +135,7 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
   const estimatedNodeCount = 6; // estimated
   const creditsCost = creditsService.calculateGenerationCost(estimatedNodeCount);
 
-  const deducted = creditsService.deductCredits(userId, creditsCost, {
+  const deducted = await creditsService.deductCredits(userId, creditsCost, {
     action: 'generate',
     workspaceId: workspace.id,
     prompt: prompt.substring(0, 100),
@@ -159,12 +160,12 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
     workspace.architectureScore = result.criticFeedback.score;
     workspace.lastCriticRun = new Date();
     workspace.updatedAt = new Date();
-    store.saveWorkspace(workspace);
+    await workspace.save();
 
     // Save to history
-    const iteration = store.getHistory(workspace.id).length + 1;
-    const historyEntry: ArchitectureHistory = {
-      id: uuidv4(),
+    const historyCount = await HistoryModel.countDocuments({ workspaceId: workspace.id });
+    const iteration = historyCount + 1;
+    const historyEntry = new HistoryModel({
       workspaceId: workspace.id,
       iteration,
       prompt,
@@ -173,9 +174,8 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
       architectureScore: result.criticFeedback.score,
       creditsSpent: result.creditsUsed,
       modelUsed: result.modelUsed,
-      createdAt: new Date(),
-    };
-    store.addHistory(workspace.id, historyEntry);
+    });
+    await historyEntry.save();
 
     return res.json({
       data: {
@@ -275,8 +275,8 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
 });
 
 // GET /api/workspaces/:id/history
-router.get('/:id/history', authenticateJWT, requireWorkspaceMember('viewer'), (req: Request, res: Response) => {
-  const history = store.getHistory(p(req.params.id));
+router.get('/:id/history', authenticateJWT, requireWorkspaceMember('viewer'), async (req: Request, res: Response) => {
+  const history = await HistoryModel.find({ workspaceId: req.params.id }).sort({ iteration: -1 });
   return res.json({ data: history.map(h => ({
     id: h.id,
     iteration: h.iteration,
@@ -326,7 +326,7 @@ function generateArchSpec(ws: Workspace): string {
 // POST /api/workspaces/:id/fork
 router.post('/:id/fork', authenticateJWT, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const sourceWs = store.findWorkspaceById(p(req.params.id));
+  const sourceWs = await WorkspaceModel.findById(req.params.id);
 
   if (!sourceWs) return res.status(404).json({ error: 'Workspace not found' });
   if (sourceWs.visibility !== 'public') {
@@ -364,7 +364,7 @@ router.post('/:id/collaborators', authenticateJWT, requireWorkspaceMember('owner
   const workspace = req.workspace!;
   const ownerId = req.user!.userId;
 
-  const invitee = store.findUserByEmail(email);
+  const invitee = await UserModel.findOne({ email });
   if (!invitee) return res.status(404).json({ error: 'User not found' });
   if (invitee.id === workspace.ownerId) return res.status(400).json({ error: 'Cannot invite yourself' });
 
@@ -400,36 +400,44 @@ router.post('/:id/collaborators', authenticateJWT, requireWorkspaceMember('owner
 });
 
 // PATCH /api/workspaces/:id/collaborators/:userId
-router.patch('/:id/collaborators/:userId', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, (req: Request, res: Response) => {
+router.patch('/:id/collaborators/:userId', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, async (req: Request, res: Response) => {
   const { role } = req.body;
   const workspace = req.workspace!;
-  const collab = workspace.collaborators.find(c => c.userId === p(req.params.userId));
+  const userId = req.params.userId;
+  
+  const collab = workspace.collaborators.find(c => c.userId === userId);
 
   if (!collab) return res.status(404).json({ error: 'Collaborator not found' });
   collab.role = role;
-  store.saveWorkspace(workspace);
+  
+  await WorkspaceModel.findByIdAndUpdate(workspace.id, {
+    $set: { collaborators: workspace.collaborators }
+  });
 
   return res.json({ message: 'Role updated', collaborators: workspace.collaborators });
 });
 
 // DELETE /api/workspaces/:id/collaborators/:userId
-router.delete('/:id/collaborators/:userId', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, (req: Request, res: Response) => {
+router.delete('/:id/collaborators/:userId', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, async (req: Request, res: Response) => {
   const workspace = req.workspace!;
-  workspace.collaborators = workspace.collaborators.filter(c => c.userId !== p(req.params.userId));
-  store.saveWorkspace(workspace);
+  workspace.collaborators = workspace.collaborators.filter(c => c.userId !== req.params.userId);
+  
+  await WorkspaceModel.findByIdAndUpdate(workspace.id, {
+    $set: { collaborators: workspace.collaborators }
+  });
 
   return res.json({ message: 'Collaborator removed' });
 });
 
 // GET /api/workspaces/:id/adrs
-router.get('/:id/adrs', authenticateJWT, requireWorkspaceMember('viewer'), (req: Request, res: Response) => {
-  return res.json({ data: store.getADRsByWorkspace(p(req.params.id)) });
+router.get('/:id/adrs', authenticateJWT, requireWorkspaceMember('viewer'), async (req: Request, res: Response) => {
+  const adrs = await ADRModel.find({ workspaceId: req.params.id });
+  return res.json({ data: adrs });
 });
 
 // POST /api/workspaces/:id/adrs
 router.post('/:id/adrs', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const user = store.findUserById(userId);
   const { nodeId, title, context, decision, consequences, alternatives, generateWithAI } = req.body;
 
   let adrData = { title, decision, consequences, alternatives: alternatives ?? [] };
@@ -469,56 +477,68 @@ router.post('/:id/adrs', authenticateJWT, requireWorkspaceMember('editor'), asyn
 });
 
 // PATCH /api/workspaces/:id/adrs/:adrId
-router.patch('/:id/adrs/:adrId', authenticateJWT, requireWorkspaceMember('editor'), (req: Request, res: Response) => {
-  const adr = store.findADRById(p(req.params.adrId));
-  if (!adr || adr.workspaceId !== p(req.params.id)) return res.status(404).json({ error: 'ADR not found' });
-
+router.patch('/:id/adrs/:adrId', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
   const { title, context, decision, consequences, alternatives, status } = req.body;
-  if (title) adr.title = title;
-  if (context) adr.context = context;
-  if (decision) adr.decision = decision;
-  if (consequences) adr.consequences = consequences;
-  if (alternatives) adr.alternatives = alternatives;
-  if (status) adr.status = status;
-  adr.updatedAt = new Date();
+  
+  const adr = await ADRModel.findOneAndUpdate(
+    { _id: req.params.adrId, workspaceId: req.params.id },
+    { 
+      $set: { 
+        ...(title && { title }),
+        ...(context && { context }),
+        ...(decision && { decision }),
+        ...(consequences && { consequences }),
+        ...(alternatives && { alternatives }),
+        ...(status && { status }),
+        updatedAt: new Date()
+      } 
+    },
+    { new: true }
+  );
 
-  store.saveADR(adr);
+  if (!adr) return res.status(404).json({ error: 'ADR not found' });
   return res.json({ data: adr });
 });
 
 // GET /api/workspaces/:id/nodes/:nodeId/comments
-router.get('/:id/nodes/:nodeId/comments', authenticateJWT, requireWorkspaceMember('viewer'), (req: Request, res: Response) => {
-  const comments = store.getCommentsByNode(p(req.params.id), p(req.params.nodeId));
+router.get('/:id/nodes/:nodeId/comments', authenticateJWT, requireWorkspaceMember('viewer'), async (req: Request, res: Response) => {
+  const comments = await CommentModel.find({ 
+    workspaceId: req.params.id, 
+    nodeId: req.params.nodeId 
+  }).sort({ createdAt: 1 });
   return res.json({ data: comments });
 });
 
 // POST /api/workspaces/:id/nodes/:nodeId/comments
-router.post('/:id/nodes/:nodeId/comments', authenticateJWT, requireWorkspaceMember('editor'), (req: Request, res: Response) => {
+router.post('/:id/nodes/:nodeId/comments', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const user = store.findUserById(userId);
+  const user = await UserModel.findById(userId);
   const { text } = req.body;
 
   if (!text) return res.status(400).json({ error: 'Comment text is required' });
 
-  const comment = store.addComment({
-    id: uuidv4(),
-    workspaceId: p(req.params.id),
-    nodeId: p(req.params.nodeId),
+  const comment = new CommentModel({
+    workspaceId: req.params.id,
+    nodeId: req.params.nodeId,
     authorId: userId,
     authorName: user?.name ?? 'Unknown',
     text,
     resolved: false,
-    createdAt: new Date(),
   });
+
+  await comment.save();
 
   return res.status(201).json({ data: comment });
 });
 
 // PATCH /api/workspaces/:id/comments/:commentId/resolve
-router.patch('/:id/comments/:commentId/resolve', authenticateJWT, requireWorkspaceMember('editor'), (req: Request, res: Response) => {
-  const comment = store.findCommentById(p(req.params.commentId));
+router.patch('/:id/comments/:commentId/resolve', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
+  const comment = await CommentModel.findOneAndUpdate(
+    { _id: req.params.commentId, workspaceId: req.params.id },
+    { $set: { resolved: true } },
+    { new: true }
+  );
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
-  comment.resolved = true;
   return res.json({ data: comment });
 });
 

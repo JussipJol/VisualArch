@@ -1,42 +1,42 @@
 import { Router, Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import { store } from '../models/store';
 import { authenticateJWT } from '../middleware/auth';
 import { creditsService } from '../services/credits.service';
 import { p } from '../utils/params';
 import { Template, Workspace } from '../types';
+import { TemplateModel } from '../models/schemas/Template.schema';
+import { WorkspaceModel } from '../models/schemas/Workspace.schema';
+import { UserModel } from '../models/schemas/User.schema';
 
 const router = Router();
 
 // GET /api/templates
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { category, techStack, premium, q } = req.query;
 
-  let templates = store.getAllTemplates();
+  const query: any = { isPublic: true };
 
   if (category) {
-    templates = templates.filter(t => t.category.toLowerCase() === String(category).toLowerCase());
+    query.category = { $regex: new RegExp(`^${category}$`, 'i') };
   }
 
   if (techStack) {
     const stacks = String(techStack).split(',');
-    templates = templates.filter(t => stacks.some(s => t.techStack.includes(s)));
+    query.techStack = { $in: stacks };
   }
 
   if (premium !== undefined) {
-    templates = templates.filter(t => t.isPremium === (premium === 'true'));
+    query.isPremium = premium === 'true';
   }
 
   if (q) {
-    const query = String(q).toLowerCase();
-    templates = templates.filter(t =>
-      t.title.toLowerCase().includes(query) ||
-      t.description.toLowerCase().includes(query)
-    );
+    const searchString = String(q);
+    query.$or = [
+      { title: { $regex: searchString, $options: 'i' } },
+      { description: { $regex: searchString, $options: 'i' } }
+    ];
   }
 
-  // Sort by use count
-  templates.sort((a, b) => b.useCount - a.useCount);
+  const templates = await TemplateModel.find(query).sort({ useCount: -1 });
 
   return res.json({
     data: templates.map(t => ({
@@ -58,8 +58,8 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // GET /api/templates/:id
-router.get('/:id', (req: Request, res: Response) => {
-  const template = store.findTemplateById(p(req.params.id));
+router.get('/:id', async (req: Request, res: Response) => {
+  const template = await TemplateModel.findById(p(req.params.id));
   if (!template) return res.status(404).json({ error: 'Template not found' });
 
   return res.json({ data: template });
@@ -68,16 +68,15 @@ router.get('/:id', (req: Request, res: Response) => {
 // POST /api/templates - publish workspace as template
 router.post('/', authenticateJWT, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const user = store.findUserById(userId);
+  const user = await UserModel.findById(userId);
   const { workspaceId, title, description, category, isPremium, price } = req.body;
 
-  const workspace = store.findWorkspaceById(workspaceId);
+  const workspace = await WorkspaceModel.findById(workspaceId);
   if (!workspace || workspace.ownerId !== userId) {
     return res.status(403).json({ error: 'Workspace not found or access denied' });
   }
 
-  const template: Template = {
-    id: uuidv4(),
+  const template = new TemplateModel({
     title: title ?? workspace.name,
     description: description ?? workspace.description ?? '',
     category: category ?? 'General',
@@ -90,14 +89,13 @@ router.post('/', authenticateJWT, async (req: Request, res: Response) => {
     useCount: 0,
     rating: 0,
     isPublic: true,
-    createdAt: new Date(),
-  };
+  });
 
-  store.saveTemplate(template);
+  await template.save();
 
   // Make workspace public
   workspace.visibility = 'public';
-  store.saveWorkspace(workspace);
+  await workspace.save();
 
   return res.status(201).json({ data: template });
 });
@@ -105,27 +103,28 @@ router.post('/', authenticateJWT, async (req: Request, res: Response) => {
 // POST /api/templates/:id/use - create workspace from template
 router.post('/:id/use', authenticateJWT, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const template = store.findTemplateById(p(req.params.id));
+  const template = await TemplateModel.findById(p(req.params.id));
 
   if (!template) return res.status(404).json({ error: 'Template not found' });
 
   if (template.isPremium) {
-    const deducted = creditsService.deductCredits(userId, template.price, {
+    const deducted = await creditsService.deductCredits(userId, template.price, {
       action: 'use_premium_template',
       templateId: template.id,
     });
 
     if (!deducted) {
+      const user = await UserModel.findById(userId);
       return res.status(402).json({
         error: 'Insufficient credits',
         required: template.price,
-        available: store.findUserById(userId)?.creditsBalance ?? 0,
+        available: user?.creditsBalance ?? 0,
       });
     }
 
     // Pay author
     if (template.authorId !== 'system') {
-      creditsService.addCredits(template.authorId, Math.floor(template.price * 0.7), 'earn', {
+      await creditsService.addCredits(template.authorId, Math.floor(template.price * 0.7), 'earn', {
         reason: 'template_used',
         templateId: template.id,
         userId,
@@ -134,12 +133,10 @@ router.post('/:id/use', authenticateJWT, async (req: Request, res: Response) => 
   }
 
   // Update template use count
-  template.useCount += 1;
-  store.saveTemplate(template);
+  await TemplateModel.findByIdAndUpdate(template.id, { $inc: { useCount: 1 } });
 
   // Create new workspace from template
-  const workspace: Workspace = {
-    id: uuidv4(),
+  const workspace = new WorkspaceModel({
     ownerId: userId,
     name: `${template.title} (from template)`,
     description: template.description,
@@ -150,11 +147,9 @@ router.post('/:id/use', authenticateJWT, async (req: Request, res: Response) => 
     visibility: 'private',
     forkCount: 0,
     architectureScore: 75,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  });
 
-  store.saveWorkspace(workspace);
+  await workspace.save();
 
   return res.status(201).json({ data: workspace });
 });

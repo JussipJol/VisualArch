@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JWTPayload, WorkspaceRole } from '../types';
-import { store } from '../models/store';
-
-const JWT_SECRET = process.env.JWT_SECRET ?? 'visualarch_jwt_secret_dev_2025';
-
 import { WorkspaceModel } from '../models/schemas/Workspace.schema';
+import { UserModel } from '../models/schemas/User.schema';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET not found in environment. Auth middleware will fail.');
+}
 
 export function authenticateJWT(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
@@ -65,13 +67,13 @@ export function requireWorkspaceMember(minRole: WorkspaceRole = 'viewer') {
 }
 
 export function requireCredits(amount: number) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user?.userId;
     if (!userId) {
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    const user = store.findUserById(userId);
+    const user = await UserModel.findById(userId);
     if (!user || user.creditsBalance < amount) {
       res.status(402).json({
         error: 'Insufficient credits',

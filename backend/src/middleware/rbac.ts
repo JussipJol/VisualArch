@@ -1,10 +1,9 @@
-import { p } from '../utils/params';
 import { Request, Response, NextFunction } from 'express';
-import { store } from '../models/store';
+import { WorkspaceModel } from '../models/schemas/Workspace.schema';
 
-export function requireOwner(req: Request, res: Response, next: NextFunction): void {
+export async function requireOwner(req: Request, res: Response, next: NextFunction): Promise<void> {
   const userId = req.user?.userId;
-  const workspace = req.workspace ?? store.findWorkspaceById(p(req.params.id));
+  const workspace = req.workspace ?? await WorkspaceModel.findById(req.params.id);
 
   if (!workspace) {
     res.status(404).json({ error: 'Workspace not found' });
@@ -16,13 +15,13 @@ export function requireOwner(req: Request, res: Response, next: NextFunction): v
     return;
   }
 
-  req.workspace = workspace;
+  req.workspace = workspace.toObject();
   next();
 }
 
-export function requireEditor(req: Request, res: Response, next: NextFunction): void {
+export async function requireEditor(req: Request, res: Response, next: NextFunction): Promise<void> {
   const userId = req.user?.userId;
-  const workspace = req.workspace ?? store.findWorkspaceById(p(req.params.id));
+  const workspace = req.workspace ?? await WorkspaceModel.findById(req.params.id);
 
   if (!workspace) {
     res.status(404).json({ error: 'Workspace not found' });
@@ -38,7 +37,7 @@ export function requireEditor(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
-  req.workspace = workspace;
+  req.workspace = workspace.toObject();
   next();
 }
 

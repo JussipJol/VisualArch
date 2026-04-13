@@ -11,7 +11,6 @@ import workspacesRouter from './routes/workspaces';
 import marketplaceRouter from './routes/marketplace';
 import { creditsRouter, notifRouter } from './routes/credits';
 import { initializeWebSocket } from './websocket/workspace.gateway';
-import { seedDemoData } from './models/store';
 import { connectDatabase } from './models/db';
 
 const app = express();
@@ -69,7 +68,7 @@ app.use(globalLimiter);
 
 // ── Request logging ────────────────────────────────────────────
 app.use((req, _res, next) => {
-  if (process.env.NODE_ENV !== 'test') {
+  if (req.path !== '/api/health' && process.env.NODE_ENV !== 'test') {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   }
   next();
@@ -91,7 +90,7 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     services: {
       api: 'ok',
-      db: 'ok (in-memory)',
+      db: process.env.MONGODB_URI ? 'mongodb-connected' : 'no-db-warning',
       ai: process.env.GROQ_API_KEY ? 'groq-connected' : 'mock-mode',
     },
   });
@@ -114,12 +113,11 @@ initializeWebSocket(httpServer, FRONTEND_URL);
 // ── Start ─────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   connectDatabase().then(() => {
-    seedDemoData();
     httpServer.listen(PORT, () => {
       console.log(`\n🚀 VisualArch API v3.0 running on http://localhost:${PORT}`);
       console.log(`📡 WebSocket ready at ws://localhost:${PORT}/workspace`);
       console.log(`🤖 AI Mode: ${process.env.GROQ_API_KEY ? 'Groq (live)' : 'Mock (demo)'}`);
-      console.log(`🗄️  DB Mode: ${process.env.MONGODB_URI ? 'MongoDB (Cloud)' : 'In-Memory (demo)'}\n`);
+      console.log(`🗄️  DB Mode: ${process.env.MONGODB_URI ? 'MongoDB (Cloud)' : 'Persistent-Mock (local)'}\n`);
     });
   });
 }
