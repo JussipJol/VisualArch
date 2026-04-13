@@ -1,14 +1,13 @@
-import { ArchitectureData, ArchitectureNode, ArchitectureEdge, CriticFeedback, CriticIssue, CodeFile } from '../types';
-import { groqAdapter } from './ai/groq.adapter';
+import { ArchitectureData, ArchitectureNode, ArchitectureEdge, CriticFeedback, CriticIssue, CodeFile, PuckDesignData, PuckBlock } from '../types';import { groqAdapter } from './ai/groq.adapter';
 
 const MOCK_DELAY = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 interface GenerationOptions {
   prompt: string;
   previousArchitecture?: ArchitectureData;
-  designData?: any;
+  designData?: PuckDesignData;
   memoryContext?: string[];
-  useStream?: boolean;
+  useStream?: boolean;  
   onEvent?: (event: string, data: Record<string, unknown>) => void;
   signal?: AbortSignal;
 }
@@ -749,12 +748,12 @@ export class GenerationService {
     return result;
   }
 
-  private parseDesignData(designData: any): string | null {
+  private parseDesignData(designData: PuckDesignData): string | null {
     // Puck format: { content: [{ type, props: { ... } }], root: { props: { ... } } }
     if (!designData || !designData.content || !Array.isArray(designData.content)) return null;
 
     try {
-      const blocks = designData.content.map((block: any, idx: number) => {
+      const blocks = designData.content.map((block: PuckBlock, idx: number) => {
         const type = block.type || 'Unknown';
         const props = block.props || {};
         

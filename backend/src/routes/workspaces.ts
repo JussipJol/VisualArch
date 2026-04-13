@@ -99,7 +99,7 @@ router.patch('/:id/design', authenticateJWT, requireWorkspaceMember('editor'), a
 // PATCH /api/workspaces/:id
 router.patch('/:id', authenticateJWT, requireWorkspaceMember('owner'), async (req: Request, res: Response) => {
   const { name, description, visibility } = req.body;
-  const update: Record<string, any> = {};
+  const update: Record<string, unknown> = {};
 
   if (name) update.name = name;
   if (description !== undefined) update.description = description;

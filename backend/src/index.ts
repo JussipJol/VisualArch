@@ -103,9 +103,18 @@ app.use((_req, res) => {
 });
 
 // ── Global error handler ──────────────────────────────────────
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Error]', err.message, err.stack);
-  res.status(500).json({ error: 'Internal server error' });
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  console.error(JSON.stringify({
+    requestId,
+    method: req.method,
+    path: req.path,
+    userId: (req as any).user?.userId ?? 'unauthenticated',
+    error: err.message,
+    stack: err.stack,
+    timestamp: new Date().toISOString(),
+  }));
+  res.status(500).json({ error: 'Internal server error', requestId });
 });
 
 // ── WebSocket ─────────────────────────────────────────────────

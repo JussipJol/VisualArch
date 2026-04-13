@@ -72,6 +72,29 @@ export interface CriticFeedback {
   timestamp: Date;
 }
 
+export interface PuckBlock {
+  type: string;
+  props: {
+    title?: string;
+    text?: string;
+    description?: string;
+    label?: string;
+    variant?: string;
+    content?: string;
+    level?: number;
+    logo?: string;
+    features?: { label?: string }[];
+    tiers?: { plan?: string }[];
+    links?: { label?: string }[];
+    [key: string]: unknown;
+  };
+}
+
+export interface PuckDesignData {
+  content: PuckBlock[];
+  root?: { props: Record<string, unknown> };
+}
+
 export interface Workspace {
   id: string;
   ownerId: string;
@@ -86,7 +109,7 @@ export interface Workspace {
   architectureScore: number;
   lastCriticRun?: Date;
   archspecYaml?: string;
-  designData?: any;
+  designData?: PuckDesignData;
   createdAt: Date;
   updatedAt: Date;
 }
