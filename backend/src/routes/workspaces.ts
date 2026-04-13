@@ -1,20 +1,25 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { store } from '../models/store';
 import { authenticateJWT, requireWorkspaceMember } from '../middleware/auth';
 import { requireOwner } from '../middleware/rbac';
 import { generationService } from '../services/generation.service';
 import { creditsService, CREDITS_COSTS } from '../services/credits.service';
 import { Workspace, ArchitectureHistory, ArchitectureData, ADR } from '../types';
 import { p } from '../utils/params';
+import { WorkspaceModel } from '../models/schemas/Workspace.schema';
+import { ADRModel } from '../models/schemas/ADR.schema';
+import { NotificationModel } from '../models/schemas/Notification.schema';
+import { UserModel } from '../models/schemas/User.schema';
 
 const router = Router();
 
 // GET /api/workspaces
-router.get('/', authenticateJWT, (req: Request, res: Response) => {
+router.get('/', authenticateJWT, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const workspaces = store.findWorkspacesByOwner(userId);
+  const workspaces = await WorkspaceModel.find({
+    $or: [{ ownerId: userId }, { 'collaborators.userId': userId }]
+  }).sort({ updatedAt: -1 });
 
   const result = workspaces.map(ws => ({
     id: ws.id,
@@ -33,17 +38,8 @@ router.get('/', authenticateJWT, (req: Request, res: Response) => {
 });
 
 // POST /api/workspaces
-router.post('/', authenticateJWT, (req: Request, res: Response) => {
+router.post('/', authenticateJWT, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-
-  // Check and deduct credits
-  const deducted = creditsService.deductCredits(userId, CREDITS_COSTS.CREATE_WORKSPACE, {
-    action: 'create_workspace',
-  });
-
-  if (!deducted) {
-    return res.status(402).json({ error: 'Insufficient credits', required: CREDITS_COSTS.CREATE_WORKSPACE });
-  }
 
   const schema = z.object({
     name: z.string().min(1).max(100),
@@ -56,23 +52,28 @@ router.post('/', authenticateJWT, (req: Request, res: Response) => {
     return res.status(400).json({ error: parsed.error.errors[0].message });
   }
 
-  const workspace: Workspace = {
-    id: uuidv4(),
+  // Atomic check and deduct credits
+  const deducted = await creditsService.deductCredits(userId, CREDITS_COSTS.CREATE_WORKSPACE, {
+    action: 'create_workspace',
+  });
+
+  if (!deducted) {
+    return res.status(402).json({ error: 'Insufficient credits', required: CREDITS_COSTS.CREATE_WORKSPACE });
+  }
+
+  const workspace = new WorkspaceModel({
     ownerId: userId,
     name: parsed.data.name,
     description: parsed.data.description,
     prompt: parsed.data.prompt,
-    techStack: [],
     architectureData: { nodes: [], edges: [], techStack: [], layoutDirection: 'TB' },
     collaborators: [],
     visibility: 'private',
     forkCount: 0,
     architectureScore: 0,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  });
 
-  store.saveWorkspace(workspace);
+  await workspace.save();
   return res.status(201).json({ data: workspace });
 });
 
@@ -81,23 +82,43 @@ router.get('/:id', authenticateJWT, requireWorkspaceMember('viewer'), (req: Requ
   return res.json({ data: req.workspace });
 });
 
+// PATCH /api/workspaces/:id/design
+router.patch('/:id/design', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
+  const { designData } = req.body;
+  
+  const workspace = await WorkspaceModel.findByIdAndUpdate(
+    req.params.id,
+    { $set: { designData, updatedAt: new Date() } },
+    { new: true }
+  );
+
+  if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+  return res.json({ data: workspace });
+});
+
 // PATCH /api/workspaces/:id
-router.patch('/:id', authenticateJWT, requireWorkspaceMember('owner'), (req: Request, res: Response) => {
-  const ws = req.workspace!;
+router.patch('/:id', authenticateJWT, requireWorkspaceMember('owner'), async (req: Request, res: Response) => {
   const { name, description, visibility } = req.body;
+  const update: Record<string, any> = {};
 
-  if (name) ws.name = name;
-  if (description !== undefined) ws.description = description;
-  if (visibility) ws.visibility = visibility;
-  ws.updatedAt = new Date();
+  if (name) update.name = name;
+  if (description !== undefined) update.description = description;
+  if (visibility) update.visibility = visibility;
 
-  store.saveWorkspace(ws);
-  return res.json({ data: ws });
+  const workspace = await WorkspaceModel.findByIdAndUpdate(
+    req.params.id,
+    { $set: update },
+    { new: true }
+  );
+
+  if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+  return res.json({ data: workspace });
 });
 
 // DELETE /api/workspaces/:id
-router.delete('/:id', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, (req: Request, res: Response) => {
-  store.deleteWorkspace(p(req.params.id));
+router.delete('/:id', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, async (req: Request, res: Response) => {
+  await WorkspaceModel.findByIdAndDelete(req.params.id);
+  await ADRModel.deleteMany({ workspaceId: req.params.id });
   return res.status(204).send();
 });
 
@@ -126,6 +147,7 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
   try {
     const result = await generationService.generate({
       prompt,
+      designData: workspace.designData,
       previousArchitecture: workspace.architectureData.nodes.length > 0
         ? workspace.architectureData : undefined,
     });
@@ -166,7 +188,7 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
     });
   } catch (error) {
     // Refund credits on failure
-    creditsService.addCredits(userId, creditsCost, 'earn', { reason: 'generation_failed_refund' });
+    await creditsService.addCredits(userId, creditsCost, 'earn', { reason: 'generation_failed_refund' });
     console.error('[Generation] Error:', error);
     return res.status(500).json({ error: 'Generation failed. Credits refunded.' });
   }
@@ -183,7 +205,7 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
   }
 
   const creditsCost = creditsService.calculateGenerationCost(6);
-  const deducted = creditsService.deductCredits(userId, creditsCost, {
+  const deducted = await creditsService.deductCredits(userId, creditsCost, {
     action: 'generate_stream',
     workspaceId: workspace.id,
   });
@@ -200,7 +222,14 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
     'X-Accel-Buffering': 'no',
   });
 
+  const abortController = new AbortController();
+  req.on('close', () => {
+    console.log(`[SSE] Client disconnected, aborting generation for workspace ${workspace.id}`);
+    abortController.abort();
+  });
+
   const sendEvent = (event: string, data: Record<string, unknown>) => {
+    if (res.writableEnded) return;
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
@@ -213,10 +242,12 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
   try {
     const result = await generationService.generate({
       prompt,
+      designData: workspace.designData,
       previousArchitecture: workspace.architectureData.nodes.length > 0
         ? workspace.architectureData : undefined,
       useStream: true,
       onEvent: sendEvent,
+      signal: abortController.signal,
     });
 
     // Update workspace
@@ -225,30 +256,19 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
     workspace.techStack = result.architectureData.techStack;
     workspace.architectureScore = result.criticFeedback.score;
     workspace.lastCriticRun = new Date();
-    workspace.updatedAt = new Date();
-    store.saveWorkspace(workspace);
-
-    const iteration = store.getHistory(workspace.id).length + 1;
-    store.addHistory(workspace.id, {
-      id: uuidv4(),
-      workspaceId: workspace.id,
-      iteration,
-      prompt,
-      architectureData: result.architectureData,
-      criticFeedback: result.criticFeedback,
-      architectureScore: result.criticFeedback.score,
-      creditsSpent: result.creditsUsed,
-      modelUsed: result.modelUsed,
-      createdAt: new Date(),
-    });
+    await WorkspaceModel.findByIdAndUpdate(workspace.id, { $set: workspace });
 
     clearInterval(heartbeat);
-    res.end();
-  } catch (error) {
+    if (!res.writableEnded) res.end();
+  } catch (error: any) {
     clearInterval(heartbeat);
-    creditsService.addCredits(userId, creditsCost, 'earn', { reason: 'stream_generation_failed_refund' });
-    sendEvent('error', { message: 'Generation failed', stage: 'unknown', retry_available: true });
-    res.end();
+    if (error.name === 'AbortError') {
+      console.log('[SSE] Task aborted successfully');
+    } else {
+      await creditsService.addCredits(userId, creditsCost, 'earn', { reason: 'stream_generation_failed_refund' });
+      sendEvent('error', { message: 'Generation failed', stage: 'unknown', retry_available: true });
+    }
+    if (!res.writableEnded) res.end();
   }
 
   return;
@@ -269,19 +289,10 @@ router.get('/:id/history', authenticateJWT, requireWorkspaceMember('viewer'), (r
 });
 
 // POST /api/workspaces/:id/rollback/:snapshot_id
-router.post('/:id/rollback/:snapshot_id', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, (req: Request, res: Response) => {
-  const history = store.getHistory(p(req.params.id));
-  const snapshot = history.find(h => h.id === p(req.params.snapshot_id));
-
-  if (!snapshot) return res.status(404).json({ error: 'Snapshot not found' });
-
-  const workspace = req.workspace!;
-  workspace.architectureData = snapshot.architectureData;
-  workspace.architectureScore = snapshot.architectureScore;
-  workspace.updatedAt = new Date();
-  store.saveWorkspace(workspace);
-
-  return res.json({ data: workspace, message: `Rolled back to iteration ${snapshot.iteration}` });
+router.post('/:id/rollback/:snapshot_id', authenticateJWT, requireWorkspaceMember('owner'), requireOwner, async (req: Request, res: Response) => {
+  // Logic simplified: Rollback would require a History collection or versioning. 
+  // For now, we stub it as we are moving to MongoDB and didn't implement HistoryModel yet.
+  return res.status(501).json({ error: 'Rollback not yet implemented in MongoDB version' });
 });
 
 // GET /api/workspaces/:id/archspec
@@ -322,25 +333,24 @@ router.post('/:id/fork', authenticateJWT, async (req: Request, res: Response) =>
     return res.status(403).json({ error: 'Can only fork public workspaces' });
   }
 
-  const forked: Workspace = {
+  const forked = new WorkspaceModel({
     ...sourceWs,
-    id: uuidv4(),
+    _id: undefined, // Let mongoose generate a new ID
+    id: undefined,
     ownerId: userId,
     name: `${sourceWs.name} (Fork)`,
     collaborators: [],
     visibility: 'private',
     forkCount: 0,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  });
+
+  await forked.save();
 
   // Increment source fork count
-  sourceWs.forkCount += 1;
-  store.saveWorkspace(sourceWs);
-  store.saveWorkspace(forked);
+  await WorkspaceModel.findByIdAndUpdate(sourceWs._id ?? sourceWs.id, { $inc: { forkCount: 1 } });
 
   // Earn credits for sharing
-  creditsService.addCredits(sourceWs.ownerId, 20, 'earn', {
+  await creditsService.addCredits(sourceWs.ownerId, 20, 'earn', {
     reason: 'workspace_forked',
     forkedBy: userId,
   });
@@ -367,24 +377,24 @@ router.post('/:id/collaborators', authenticateJWT, requireWorkspaceMember('owner
     invitedBy: ownerId,
     acceptedAt: new Date(),
   });
-  workspace.updatedAt = new Date();
-  store.saveWorkspace(workspace);
+  
+  await WorkspaceModel.findByIdAndUpdate(workspace.id, { 
+    $set: { collaborators: workspace.collaborators } 
+  });
 
   // Bonus credits for inviting
-  creditsService.addCredits(ownerId, 20, 'earn', {
+  await creditsService.addCredits(ownerId, 20, 'earn', {
     reason: 'invited_collaborator',
     inviteeId: invitee.id,
   });
 
   // Create notification for invitee
-  store.addNotification(invitee.id, {
-    id: uuidv4(),
+  const notif = new NotificationModel({
     userId: invitee.id,
     type: 'collab_invite',
     payload: { workspaceId: workspace.id, workspaceName: workspace.name, role },
-    read: false,
-    createdAt: new Date(),
   });
+  await notif.save();
 
   return res.status(201).json({ message: 'Collaborator added', collaborators: workspace.collaborators });
 });
@@ -426,15 +436,14 @@ router.post('/:id/adrs', authenticateJWT, requireWorkspaceMember('editor'), asyn
 
   if (generateWithAI) {
     const creditsCost = CREDITS_COSTS.ADR_AI;
-    const deducted = creditsService.deductCredits(userId, creditsCost, { action: 'adr_ai' });
+    const deducted = await creditsService.deductCredits(userId, creditsCost, { action: 'adr_ai' });
     if (!deducted) return res.status(402).json({ error: 'Insufficient credits' });
 
     const generated = await generationService.generateADR(p(req.params.id), title ?? 'Component', context ?? '');
     adrData = generated;
   }
 
-  const adr: ADR = {
-    id: uuidv4(),
+  const adr = new ADRModel({
     workspaceId: p(req.params.id),
     nodeId,
     title: adrData.title,
@@ -444,21 +453,17 @@ router.post('/:id/adrs', authenticateJWT, requireWorkspaceMember('editor'), asyn
     alternatives: adrData.alternatives,
     status: 'proposed',
     createdBy: userId,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  });
 
-  store.saveADR(adr);
+  await adr.save();
 
-  // Broadcast to collaborators
-  store.addNotification(req.workspace!.ownerId, {
-    id: uuidv4(),
+  // Create notification for owner
+  const notif = new NotificationModel({
     userId: req.workspace!.ownerId,
     type: 'adr_created',
     payload: { adrId: adr.id, title: adr.title, workspaceId: p(req.params.id) },
-    read: false,
-    createdAt: new Date(),
   });
+  await notif.save();
 
   return res.status(201).json({ data: adr });
 });
@@ -524,7 +529,7 @@ router.post('/:id/export', authenticateJWT, requireWorkspaceMember('editor'), as
   const { platform = 'vercel-railway' } = req.body;
 
   const creditsCost = CREDITS_COSTS.CICD;
-  const deducted = creditsService.deductCredits(userId, creditsCost, { action: 'cicd_export' });
+  const deducted = await creditsService.deductCredits(userId, creditsCost, { action: 'cicd_export' });
   if (!deducted) return res.status(402).json({ error: 'Insufficient credits' });
 
   const cicdConfig = await generationService.generateCICDConfig(
@@ -552,7 +557,7 @@ router.post('/:id/critique', authenticateJWT, requireWorkspaceMember('editor'), 
     return res.status(400).json({ error: 'No architecture to critique. Generate first.' });
   }
 
-  const deducted = creditsService.deductCredits(userId, CREDITS_COSTS.CRITIQUE, { action: 'critique' });
+  const deducted = await creditsService.deductCredits(userId, CREDITS_COSTS.CRITIQUE, { action: 'critique' });
   if (!deducted) return res.status(402).json({ error: 'Insufficient credits' });
 
   // Simulate critique
@@ -574,6 +579,54 @@ router.post('/:id/critique', authenticateJWT, requireWorkspaceMember('editor'), 
       timestamp: new Date(),
     },
   });
+});
+
+// POST /api/workspaces/:id/sync
+router.post('/:id/sync', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
+  const userId = req.user!.userId;
+  const workspaceId = req.params.id;
+  const { modifiedFiles } = req.body;
+
+  if (!modifiedFiles || !Array.isArray(modifiedFiles)) {
+    return res.status(400).json({ error: 'Modified files are required' });
+  }
+
+  // Deduct credits for sync
+  const deducted = await creditsService.deductCredits(userId, CREDITS_COSTS.SYNC_RECONCILE, {
+    action: 'sync_architecture',
+    workspaceId,
+  });
+
+  if (!deducted) {
+    return res.status(402).json({ error: 'Insufficient credits', required: CREDITS_COSTS.SYNC_RECONCILE });
+  }
+
+  try {
+    const workspace = await WorkspaceModel.findById(workspaceId);
+    if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+
+    const result = await generationService.reconcileArchitecture(
+      workspace.architectureData as any,
+      modifiedFiles
+    );
+
+    workspace.architectureData = result.architectureData as any;
+    workspace.updatedAt = new Date();
+    await workspace.save();
+
+    // Create a notification for the user
+    await NotificationModel.create({
+      userId,
+      title: 'Architecture Synchronized',
+      message: result.report,
+      type: 'info'
+    });
+
+    return res.json({ data: result.architectureData, report: result.report });
+  } catch (err) {
+    console.error('[Sync] Reconciliation failed:', err);
+    return res.status(500).json({ error: 'Failed to synchronize architecture' });
+  }
 });
 
 export default router;

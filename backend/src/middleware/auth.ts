@@ -5,6 +5,8 @@ import { store } from '../models/store';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'visualarch_jwt_secret_dev_2025';
 
+import { WorkspaceModel } from '../models/schemas/Workspace.schema';
+
 export function authenticateJWT(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -27,7 +29,7 @@ export function requireWorkspaceMember(minRole: WorkspaceRole = 'viewer') {
     viewer: 1, editor: 2, owner: 3,
   };
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const userId = req.user?.userId;
 
@@ -36,7 +38,7 @@ export function requireWorkspaceMember(minRole: WorkspaceRole = 'viewer') {
       return;
     }
 
-    const workspace = store.findWorkspaceById(id);
+    const workspace = await WorkspaceModel.findById(id);
     if (!workspace) {
       res.status(404).json({ error: 'Workspace not found' });
       return;
@@ -49,7 +51,7 @@ export function requireWorkspaceMember(minRole: WorkspaceRole = 'viewer') {
     if (roleHierarchy[userRole] < roleHierarchy[minRole]) {
       // Allow viewers to view public workspaces
       if (workspace.visibility === 'public' && minRole === 'viewer') {
-        req.workspace = workspace;
+        req.workspace = workspace.toObject();
         next();
         return;
       }
@@ -57,7 +59,7 @@ export function requireWorkspaceMember(minRole: WorkspaceRole = 'viewer') {
       return;
     }
 
-    req.workspace = workspace;
+    req.workspace = workspace.toObject();
     next();
   };
 }

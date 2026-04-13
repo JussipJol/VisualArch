@@ -12,6 +12,7 @@ import marketplaceRouter from './routes/marketplace';
 import { creditsRouter, notifRouter } from './routes/credits';
 import { initializeWebSocket } from './websocket/workspace.gateway';
 import { seedDemoData } from './models/store';
+import { connectDatabase } from './models/db';
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -112,12 +113,14 @@ initializeWebSocket(httpServer, FRONTEND_URL);
 
 // ── Start ─────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
-  seedDemoData();
-  httpServer.listen(PORT, () => {
-    console.log(`\n🚀 VisualArch API v3.0 running on http://localhost:${PORT}`);
-    console.log(`📡 WebSocket ready at ws://localhost:${PORT}/workspace`);
-    console.log(`🤖 AI Mode: ${process.env.GROQ_API_KEY ? 'Groq (live)' : 'Mock (demo)'}`);
-    console.log(`🗄️  DB Mode: In-Memory (demo) — set MONGODB_URI for production\n`);
+  connectDatabase().then(() => {
+    seedDemoData();
+    httpServer.listen(PORT, () => {
+      console.log(`\n🚀 VisualArch API v3.0 running on http://localhost:${PORT}`);
+      console.log(`📡 WebSocket ready at ws://localhost:${PORT}/workspace`);
+      console.log(`🤖 AI Mode: ${process.env.GROQ_API_KEY ? 'Groq (live)' : 'Mock (demo)'}`);
+      console.log(`🗄️  DB Mode: ${process.env.MONGODB_URI ? 'MongoDB (Cloud)' : 'In-Memory (demo)'}\n`);
+    });
   });
 }
 

@@ -71,6 +71,7 @@ interface WorkspaceState {
   generationProgress: GenerationProgress;
   loading: boolean;
   error: string | null;
+  pendingCodeChanges: Record<string, string>; // path -> content
 
   fetchWorkspaces: () => Promise<void>;
   fetchWorkspace: (id: string) => Promise<void>;
@@ -78,6 +79,9 @@ interface WorkspaceState {
   deleteWorkspace: (id: string) => Promise<void>;
   generateArchitecture: (workspaceId: string, prompt: string, onProgress?: (p: GenerationProgress) => void) => Promise<ArchitectureData | null>;
   setSelectedNode: (node: ArchNode | null) => void;
+  updatePendingFile: (path: string, content: string) => void;
+  saveDesignCanvas: (workspaceId: string, designData: any) => Promise<void>;
+  syncCodeToArchitecture: (workspaceId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -89,6 +93,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   generationProgress: { stage: 'idle' },
   loading: false,
   error: null,
+  pendingCodeChanges: {},
 
   fetchWorkspaces: async () => {
     set({ loading: true, error: null });
@@ -176,7 +181,53 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return null;
     }
   },
+  
+  saveDesignCanvas: async (workspaceId, designData) => {
+    try {
+      await api.patch(`/api/workspaces/${workspaceId}/design`, { designData });
+      set(state => ({
+        currentWorkspace: state.currentWorkspace 
+          ? { ...state.currentWorkspace, designData }
+          : null
+      }));
+    } catch (err) {
+      console.error('Failed to save design canvas:', err);
+    }
+  },
 
   setSelectedNode: (node) => set({ selectedNode: node }),
+  
+  updatePendingFile: (path, content) => set(state => ({
+    pendingCodeChanges: { ...state.pendingCodeChanges, [path]: content }
+  })),
+
+  syncCodeToArchitecture: async (workspaceId) => {
+    const { pendingCodeChanges, currentWorkspace } = get();
+    if (!currentWorkspace || Object.keys(pendingCodeChanges).length === 0) return;
+
+    set({ generating: true, generationProgress: { stage: 'planning', message: 'Reconciling code with architecture...' } });
+
+    try {
+      // Send modified files + current architecture for AI analysis
+      const res = await api.post<{ data: ArchitectureData }>(`/api/workspaces/${workspaceId}/sync`, {
+        modifiedFiles: Object.entries(pendingCodeChanges).map(([path, content]) => ({ path, content })),
+      });
+
+      set(state => ({
+        currentWorkspace: state.currentWorkspace 
+          ? { ...state.currentWorkspace, architectureData: res.data }
+          : null,
+        pendingCodeChanges: {}, // Clear after sync
+        generating: false,
+        generationProgress: { stage: 'complete', message: 'Architecture synchronized!' }
+      }));
+    } catch (err) {
+      set({ 
+        generating: false, 
+        generationProgress: { stage: 'error', message: err instanceof Error ? err.message : 'Sync failed' } 
+      });
+    }
+  },
+
   clearError: () => set({ error: null }),
 }));

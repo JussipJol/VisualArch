@@ -13,6 +13,10 @@ import { ArchitectureCanvas } from '@/components/canvas/ArchitectureCanvas';
 import { CriticFeedbackPanel } from '@/components/ai-assistant/CriticFeedbackPanel';
 import { ArchitectureScoreGauge } from '@/components/charts/ArchitectureScoreGauge';
 import { PromptSuggestions } from '@/components/ai-assistant/PromptSuggestions';
+import { IDEMode } from '@/components/workspace/IDEMode';
+import { ADRMode } from '@/components/workspace/ADRMode';
+import { DesignMode } from '@/components/workspace/DesignMode';
+import { useToastStore } from '@/lib/store/toast';
 
 type Mode = 'canvas' | 'ide' | 'design' | 'adr';
 
@@ -26,6 +30,8 @@ export default function WorkspacePage() {
     currentWorkspace, selectedNode, generating, generationProgress,
     fetchWorkspace, generateArchitecture, setSelectedNode, loading,
   } = useWorkspaceStore();
+  
+  const { addToast } = useToastStore();
 
   const [mode, setMode] = useState<Mode>('canvas');
   const [prompt, setPrompt] = useState('');
@@ -39,14 +45,18 @@ export default function WorkspacePage() {
 
   const handleGenerate = async () => {
     if (!prompt.trim() || generating) return;
-    const result = await generateArchitecture(id, prompt);
-    if (result) {
-      // Extract critic issues from progress
-      setCriticIssues([
-        { severity: 'warning', title: 'Consider rate limiting', description: 'No rate limiting detected on API endpoints', suggestion: 'Add Redis-backed rate limiting to the API Gateway', nodeId: result.nodes[0]?.id },
-        { severity: 'info', title: 'Add monitoring', description: 'No observability layer visible', suggestion: 'Add Sentry and structured logging' },
-      ]);
-      setPrompt('');
+    try {
+      const result = await generateArchitecture(id, prompt);
+      if (result) {
+        addToast('Architecture recalibrated successfully', 'success');
+        // Extract critic issues from result if present (the LLM adapter returns them now)
+        if (result.criticFeedback?.issues) {
+          setCriticIssues(result.criticFeedback.issues);
+        }
+        setPrompt('');
+      }
+    } catch (err) {
+      addToast('Generation engine failure. Please check your AI quota.', 'error');
     }
   };
 
@@ -252,106 +262,6 @@ export default function WorkspacePage() {
             </div>
           </aside>
         )}
-      </div>
-    </div>
-  );
-}
-
-function IDEMode({ node, workspace }: { node: ArchNode | null; workspace: any }) {
-  const [activeFile, setActiveFile] = useState(0);
-  const files = node?.files ?? [];
-
-  return (
-    <div className="h-full flex bg-bg">
-      {/* File tree */}
-      <div className="w-48 border-r border-white/5 bg-surface overflow-y-auto p-2">
-        <div className="text-xs text-text-secondary mb-2 px-2">FILES</div>
-        {workspace?.architectureData.nodes.map((n: ArchNode) => (
-          <div key={n.id} className="mb-1">
-            <div className="text-xs text-text-secondary px-2 py-1 truncate">{n.label}</div>
-            {n.files?.map((f, i) => (
-              <button
-                key={i}
-                onClick={() => { /* select */ }}
-                className="w-full text-left text-xs text-text-secondary hover:text-text-primary hover:bg-surface-2 px-3 py-1 rounded truncate"
-              >
-                {f.name}
-              </button>
-            ))}
-          </div>
-        ))}
-        {!workspace?.architectureData.nodes.length && (
-          <div className="text-xs text-text-secondary px-2">No files yet</div>
-        )}
-      </div>
-
-      {/* Editor */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {node && files.length > 0 ? (
-          <>
-            {/* Tabs */}
-            <div className="flex items-center border-b border-white/5 bg-surface overflow-x-auto">
-              {files.map((f, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveFile(i)}
-                  className={`flex-shrink-0 px-4 py-2.5 text-xs border-r border-white/5 transition-colors ${i === activeFile ? 'bg-bg text-text-primary border-b-2 border-b-accent' : 'text-text-secondary hover:text-text-primary'}`}
-                >
-                  {f.name}
-                </button>
-              ))}
-            </div>
-            {/* Code */}
-            <div className="flex-1 overflow-auto p-4 font-mono text-xs text-text-secondary leading-relaxed whitespace-pre">
-              {files[activeFile]?.content}
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-text-secondary text-sm">
-            {node ? 'No files generated for this node' : 'Select a node from the canvas'}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DesignMode() {
-  return (
-    <div className="h-full flex items-center justify-center bg-bg">
-      <div className="text-center text-text-secondary">
-        <PenTool className="w-12 h-12 mx-auto mb-3 opacity-30" />
-        <p className="text-sm">Design canvas (tldraw integration)</p>
-        <p className="text-xs mt-1 opacity-60">Draw diagrams that inform AI generation</p>
-      </div>
-    </div>
-  );
-}
-
-function ADRMode({ workspaceId }: { workspaceId: string }) {
-  return (
-    <div className="h-full p-6 overflow-y-auto">
-      <div className="max-w-2xl mx-auto">
-        <h2 className="text-lg font-semibold text-text-primary mb-4">Architecture Decision Records</h2>
-        <div className="space-y-3">
-          <div className="p-4 rounded-xl bg-surface border border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded-full bg-success/20 text-success text-xs">Accepted</span>
-              <span className="text-sm font-medium text-text-primary">ADR-001: Use MongoDB for primary data store</span>
-            </div>
-            <p className="text-xs text-text-secondary">Decision to use MongoDB Atlas for flexible schema and vector search capabilities.</p>
-          </div>
-          <div className="p-4 rounded-xl bg-surface border border-white/10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded-full bg-warning/20 text-warning text-xs">Proposed</span>
-              <span className="text-sm font-medium text-text-primary">ADR-002: Adopt JWT with refresh token rotation</span>
-            </div>
-            <p className="text-xs text-text-secondary">Authentication strategy with 15-minute access tokens and 30-day refresh tokens.</p>
-          </div>
-        </div>
-        <button className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm hover:bg-accent/90 transition-colors">
-          <FileText className="w-4 h-4" /> Add ADR
-        </button>
       </div>
     </div>
   );

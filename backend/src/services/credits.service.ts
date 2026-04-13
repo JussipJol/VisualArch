@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
-import { store } from '../models/store';
 import { Transaction, TransactionType, PlanType } from '../types';
+import { UserModel } from '../models/schemas/User.schema';
+import { TransactionModel } from '../models/schemas/Transaction.schema';
 
 export const CREDITS_COSTS = {
   CREATE_WORKSPACE: 5,
@@ -13,6 +14,7 @@ export const CREDITS_COSTS = {
   ADR_AI: 3,
   PREMIUM_TEMPLATE_MIN: 5,
   PREMIUM_TEMPLATE_MAX: 50,
+  SYNC_RECONCILE: 20,
 } as const;
 
 export const CREDITS_EARN = {
@@ -29,58 +31,61 @@ export const PLAN_CREDITS: Record<PlanType, number> = {
 };
 
 export class CreditsService {
-  deductCredits(userId: string, amount: number, meta: Record<string, unknown>): boolean {
-    const user = store.findUserById(userId);
-    if (!user || user.creditsBalance < amount) return false;
+  async deductCredits(userId: string, amount: number, meta: Record<string, unknown>): Promise<boolean> {
+    // Atomic update: only deduct if current balance >= amount
+    const user = await UserModel.findOneAndUpdate(
+      { _id: userId, creditsBalance: { $gte: amount } },
+      { $inc: { creditsBalance: -amount } },
+      { new: true }
+    );
 
-    const newBalance = user.creditsBalance - amount;
-    user.creditsBalance = newBalance;
-    user.updatedAt = new Date();
-    store.saveUser(user);
+    if (!user) return false;
 
-    const tx: Transaction = {
-      id: uuidv4(),
+    const tx = new TransactionModel({
       userId,
-      type: 'spend' as TransactionType,
+      type: 'spend',
       amount: -amount,
-      balanceAfter: newBalance,
+      balanceAfter: user.creditsBalance,
       meta,
-      createdAt: new Date(),
-    };
-    store.addTransaction(userId, tx);
+    });
+    
+    await tx.save();
     return true;
   }
 
-  addCredits(userId: string, amount: number, type: TransactionType, meta: Record<string, unknown>): boolean {
-    const user = store.findUserById(userId);
+  async addCredits(userId: string, amount: number, type: TransactionType, meta: Record<string, unknown>): Promise<boolean> {
+    const user = await UserModel.findByIdAndUpdate(
+      userId,
+      { $inc: { creditsBalance: amount } },
+      { new: true }
+    );
+
     if (!user) return false;
 
-    const newBalance = user.creditsBalance + amount;
-    user.creditsBalance = newBalance;
-    user.updatedAt = new Date();
-    store.saveUser(user);
-
-    const tx: Transaction = {
-      id: uuidv4(),
+    const tx = new TransactionModel({
       userId,
       type,
       amount,
-      balanceAfter: newBalance,
+      balanceAfter: user.creditsBalance,
       meta,
-      createdAt: new Date(),
-    };
-    store.addTransaction(userId, tx);
+    });
+    
+    await tx.save();
     return true;
   }
 
-  getBalance(userId: string): { balance: number; plan: PlanType; history: Transaction[] } {
-    const user = store.findUserById(userId);
+  async getBalance(userId: string): Promise<{ balance: number; plan: PlanType; history: any[] }> {
+    const user = await UserModel.findById(userId);
     if (!user) return { balance: 0, plan: 'free', history: [] };
+
+    const history = await TransactionModel.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(50);
 
     return {
       balance: user.creditsBalance,
       plan: user.plan,
-      history: store.getTransactions(userId).slice(0, 50),
+      history,
     };
   }
 

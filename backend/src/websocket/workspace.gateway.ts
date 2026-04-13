@@ -103,7 +103,7 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
       console.log(`[WS] User ${user.userId} joined workspace ${workspaceId}`);
     });
 
-    // CURSOR MOVEMENT
+    // CURSOR MOVEMENT (Throttled update)
     socket.on('cursor_move', ({ x, y, nodeId }: { x: number; y: number; nodeId?: string }) => {
       if (!currentWorkspaceId) return;
       const session = workspaceSessions.get(currentWorkspaceId);
@@ -112,14 +112,23 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
       const presence = session.get(socket.id);
       if (presence) {
         presence.cursor = { x, y, nodeId };
-        // Throttle: broadcast cursor updates in batches
-        socket.to(currentWorkspaceId).emit('cursors_update', {
-          cursors: Object.fromEntries(
-            Array.from(session.entries()).map(([, p]) => [p.userId, p.cursor])
-          ),
-        });
       }
     });
+
+    // START BATCHED BROADCAST FOR CURSORS
+    const broadcastInterval = setInterval(() => {
+      if (!currentWorkspaceId) return;
+      const session = workspaceSessions.get(currentWorkspaceId);
+      if (!session || session.size === 0) return;
+
+      const cursors = Object.fromEntries(
+        Array.from(session.entries())
+          .filter(([, p]) => p.cursor)
+          .map(([, p]) => [p.userId, p.cursor])
+      );
+
+      workspaceNamespace.to(currentWorkspaceId).emit('cursors_update', { cursors });
+    }, 50); // 20Hz update rate is plenty for smooth cursors while saving 80% bandwidth
 
     // NODE SELECTED
     socket.on('node_selected', ({ nodeId }: { nodeId: string }) => {
@@ -177,6 +186,7 @@ export function initializeWebSocket(httpServer: HTTPServer, frontendUrl: string)
 
     // DISCONNECT
     socket.on('disconnect', () => {
+      clearInterval(broadcastInterval);
       if (currentWorkspaceId) {
         const session = workspaceSessions.get(currentWorkspaceId);
         if (session) {

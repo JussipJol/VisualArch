@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { ToastContainer } from '@/components/ui/ToastContainer';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -20,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-bg text-text-primary antialiased">
         {children}
+        <ToastContainer />
       </body>
     </html>
   );

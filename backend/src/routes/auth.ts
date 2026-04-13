@@ -8,6 +8,8 @@ import { store } from '../models/store';
 import { authenticateJWT } from '../middleware/auth';
 import { User, JWTPayload } from '../types';
 import { PLAN_CREDITS } from '../services/credits.service';
+import { UserModel } from '../models/schemas/User.schema';
+import { RefreshTokenModel } from '../models/schemas/RefreshToken.schema';
 
 const router = Router();
 
@@ -20,6 +22,10 @@ function generateAccessToken(payload: JWTPayload): string {
 
 function generateRefreshToken(): string {
   return crypto.randomBytes(64).toString('hex');
+}
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 // Validation schemas
@@ -44,29 +50,32 @@ router.post('/register', async (req: Request, res: Response) => {
 
     const { email, password, name } = parsed.data;
 
-    if (store.findUserByEmail(email)) {
+    const existingUser = await UserModel.findOne({ email });
+    if (existingUser) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const refreshToken = generateRefreshToken();
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-
-    const user: User = {
-      id: uuidv4(),
+    
+    const user = new UserModel({
       email,
       name,
       passwordHash,
       plan: 'free',
       creditsBalance: PLAN_CREDITS.free,
-      creditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      refreshTokenHash,
       onboardingCompleted: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    });
 
-    store.saveUser(user);
+    await user.save();
+
+    const refreshToken = generateRefreshToken();
+    const tokenHash = hashToken(refreshToken);
+    
+    await new RefreshTokenModel({
+      tokenHash,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).save();
 
     const payload: JWTPayload = { userId: user.id, email: user.email, plan: user.plan };
     const accessToken = generateAccessToken(payload);
@@ -80,14 +89,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     return res.status(201).json({
       accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        plan: user.plan,
-        creditsBalance: user.creditsBalance,
-        onboardingCompleted: user.onboardingCompleted,
-      },
+      user: user.toJSON(),
     });
   } catch (error) {
     console.error('[Auth] Register error:', error);
@@ -104,7 +106,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const { email, password } = parsed.data;
-    const user = store.findUserByEmail(email);
+    const user = await UserModel.findOne({ email });
 
     if (!user) {
       // Prevent timing attacks by still running bcrypt
@@ -118,9 +120,13 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const refreshToken = generateRefreshToken();
-    user.refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    user.updatedAt = new Date();
-    store.saveUser(user);
+    const tokenHash = hashToken(refreshToken);
+    
+    await new RefreshTokenModel({
+      tokenHash,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).save();
 
     const payload: JWTPayload = { userId: user.id, email: user.email, plan: user.plan };
     const accessToken = generateAccessToken(payload);
@@ -134,14 +140,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     return res.json({
       accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        plan: user.plan,
-        creditsBalance: user.creditsBalance,
-        onboardingCompleted: user.onboardingCompleted,
-      },
+      user: user.toJSON(),
     });
   } catch (error) {
     console.error('[Auth] Login error:', error);
@@ -157,24 +156,29 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'No refresh token' });
     }
 
-    // Find user with matching refresh token
-    let targetUser: User | undefined;
-    for (const user of store.users.values()) {
-      if (user.refreshTokenHash) {
-        const valid = await bcrypt.compare(refreshToken, user.refreshTokenHash);
-        if (valid) { targetUser = user; break; }
-      }
+    const tokenHash = hashToken(refreshToken);
+    const savedToken = await RefreshTokenModel.findOne({ tokenHash });
+
+    if (!savedToken || savedToken.expiresAt < new Date()) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
     }
 
+    const targetUser = await UserModel.findById(savedToken.userId);
     if (!targetUser) {
-      return res.status(401).json({ error: 'Invalid refresh token' });
+      return res.status(401).json({ error: 'User not found' });
     }
 
-    // Token rotation
+    // Token rotation: delete old, create new
+    await RefreshTokenModel.deleteOne({ _id: savedToken._id });
+
     const newRefreshToken = generateRefreshToken();
-    targetUser.refreshTokenHash = await bcrypt.hash(newRefreshToken, 10);
-    targetUser.updatedAt = new Date();
-    store.saveUser(targetUser);
+    const newTokenHash = hashToken(newRefreshToken);
+    
+    await new RefreshTokenModel({
+      tokenHash: newTokenHash,
+      userId: targetUser.id,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).save();
 
     const payload: JWTPayload = { userId: targetUser.id, email: targetUser.email, plan: targetUser.plan };
     const accessToken = generateAccessToken(payload);
@@ -194,28 +198,19 @@ router.post('/refresh', async (req: Request, res: Response) => {
 });
 
 // GET /api/auth/me
-router.get('/me', authenticateJWT, (req: Request, res: Response) => {
-  const user = store.findUserById(req.user!.userId);
+router.get('/me', authenticateJWT, async (req: Request, res: Response) => {
+  const user = await UserModel.findById(req.user!.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  return res.json({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    plan: user.plan,
-    creditsBalance: user.creditsBalance,
-    creditsResetDate: user.creditsResetDate,
-    avatarUrl: user.avatarUrl,
-    onboardingCompleted: user.onboardingCompleted,
-  });
+  return res.json(user.toJSON());
 });
 
 // POST /api/auth/logout
-router.post('/logout', authenticateJWT, (req: Request, res: Response) => {
-  const user = store.findUserById(req.user!.userId);
-  if (user) {
-    user.refreshTokenHash = undefined;
-    store.saveUser(user);
+router.post('/logout', authenticateJWT, async (req: Request, res: Response) => {
+  const refreshToken = req.cookies?.refreshToken;
+  if (refreshToken) {
+    const tokenHash = hashToken(refreshToken);
+    await RefreshTokenModel.deleteOne({ tokenHash });
   }
 
   res.clearCookie('refreshToken');
@@ -224,29 +219,29 @@ router.post('/logout', authenticateJWT, (req: Request, res: Response) => {
 
 // PATCH /api/users/me
 router.patch('/users/me', authenticateJWT, async (req: Request, res: Response) => {
-  const user = store.findUserById(req.user!.userId);
+  const { name, avatarUrl } = req.body;
+  const update: Record<string, any> = {};
+  if (name) update.name = name;
+  if (avatarUrl) update.avatarUrl = avatarUrl;
+
+  const user = await UserModel.findByIdAndUpdate(
+    req.user!.userId,
+    { $set: update },
+    { new: true }
+  );
+
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const { name, avatarUrl } = req.body;
-  if (name) user.name = name;
-  if (avatarUrl) user.avatarUrl = avatarUrl;
-  user.updatedAt = new Date();
-  store.saveUser(user);
-
-  return res.json({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    avatarUrl: user.avatarUrl,
-  });
+  return res.json(user.toJSON());
 });
 
 // DELETE /api/users/me (GDPR)
-router.delete('/users/me', authenticateJWT, (req: Request, res: Response) => {
+router.delete('/users/me', authenticateJWT, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  store.deleteUser(userId);
+  await UserModel.findByIdAndDelete(userId);
+  await RefreshTokenModel.deleteMany({ userId });
   res.clearCookie('refreshToken');
-  return res.json({ message: 'Account deletion queued. Data will be removed within 30 days.' });
+  return res.json({ message: 'Account deleted successfully' });
 });
 
 export default router;
