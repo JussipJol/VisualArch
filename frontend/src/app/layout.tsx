@@ -1,0 +1,26 @@
+import type { Metadata } from 'next';
+import '@/styles/globals.css';
+
+export const metadata: Metadata = {
+  title: 'VisualArch AI — Living Architecture Platform',
+  description: 'AI-powered software architecture design and code generation platform. Generate production-ready architecture with real-time collaboration.',
+  keywords: ['AI', 'software architecture', 'code generation', 'system design'],
+  openGraph: {
+    title: 'VisualArch AI',
+    description: 'The first Living Architecture Platform',
+    type: 'website',
+  },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+      </head>
+      <body className="bg-bg text-text-primary antialiased">
+        {children}
+      </body>
+    </html>
+  );
+}

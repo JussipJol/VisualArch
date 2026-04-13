@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0D0E1A;
+  --color-surface: #16213E;
+  --color-surface-2: #1E2A45;
+  --color-accent: #5E81F4;
+  --color-accent-2: #22D3EE;
+  --color-success: #4ADE80;
+  --color-warning: #FACC15;
+  --color-danger: #F87171;
+  --color-purple: #A78BFA;
+  --color-text-primary: #EAEEFF;
+  --color-text-secondary: #8B8FA8;
+  --radius-card: 16px;
+  --radius-btn: 10px;
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.35);
+  --shadow-glow-accent: 0 0 20px rgba(94,129,244,0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-geist-sans, system-ui), sans-serif;
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-surface); }
+::-webkit-scrollbar-thumb { background: var(--color-surface-2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
+
+/* ReactFlow overrides */
+.react-flow__background { background: var(--color-bg) !important; }
+.react-flow__minimap { background: var(--color-surface) !important; border: 1px solid var(--color-surface-2); border-radius: 8px; }
+.react-flow__controls { background: var(--color-surface) !important; border: 1px solid var(--color-surface-2) !important; border-radius: 8px; }
+.react-flow__controls button { background: var(--color-surface) !important; color: var(--color-text-primary) !important; border-bottom: 1px solid var(--color-surface-2) !important; }
+.react-flow__controls button:hover { background: var(--color-surface-2) !important; }
+.react-flow__edge-path { stroke: var(--color-accent) !important; stroke-width: 1.5 !important; }
+.react-flow__edge.animated path { stroke-dasharray: 5; animation: dash 1s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -10; } }
+
+/* SSE streaming pulse */
+@keyframes streamPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.streaming { animation: streamPulse 1.2s ease-in-out infinite; }
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass card */
+.glass {
+  background: rgba(22, 33, 62, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Score gauge animation */
+@keyframes gaugeAnim {
+  from { stroke-dashoffset: 251; }
+  to { stroke-dashoffset: var(--gauge-offset); }
+}
+.gauge-circle { animation: gaugeAnim 0.8s ease-out forwards; }
