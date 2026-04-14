@@ -32,6 +32,10 @@ export const PLAN_CREDITS: Record<PlanType, number> = {
 
 export class CreditsService {
   async deductCredits(userId: string, amount: number, meta: Record<string, unknown>): Promise<boolean> {
+    const freshUser = await UserModel.findById(userId);
+    if (freshUser && freshUser.creditsResetDate < new Date()) {
+      await this.resetMonthlyCredits(userId);
+    }
     // Atomic update: only deduct if current balance >= amount
     const user = await UserModel.findOneAndUpdate(
       { _id: userId, creditsBalance: { $gte: amount } },
@@ -103,9 +107,17 @@ export class CreditsService {
     await UserModel.findByIdAndUpdate(userId, {
       $set: {
         creditsBalance: monthlyCredits,
-        creditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      }
+        creditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
     });
+
+    await new TransactionModel({
+      userId,
+      type: 'earn',
+      amount: monthlyCredits,
+      balanceAfter: monthlyCredits,
+      meta: { reason: 'monthly_reset', plan: user.plan },
+    }).save();
   }
 }
 

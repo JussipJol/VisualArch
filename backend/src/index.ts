@@ -9,10 +9,12 @@ import rateLimit from 'express-rate-limit';
 import authRouter from './routes/auth';
 import workspacesRouter from './routes/workspaces';
 import marketplaceRouter from './routes/marketplace';
+import usersRouter from './routes/users';
 import { creditsRouter, notifRouter } from './routes/credits';
 import { initializeWebSocket } from './websocket/workspace.gateway';
 import { connectDatabase } from './models/db';
 import { seedDemoUser } from './models/seed';
+
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -84,6 +86,7 @@ app.use('/api/workspaces/:id/generate', generateLimiter);
 app.use('/api/templates', marketplaceRouter);
 app.use('/api/credits', creditsRouter);
 app.use('/api/notifications', notifRouter);
+app.use('/api/users', usersRouter);
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

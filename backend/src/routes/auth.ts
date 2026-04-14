@@ -2,10 +2,10 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { authenticateJWT } from '../middleware/auth';
-import { User, JWTPayload } from '../types';
+import { JWTPayload } from '../types';
 import { PLAN_CREDITS } from '../services/credits.service';
 import { UserModel } from '../models/schemas/User.schema';
 import { RefreshTokenModel } from '../models/schemas/RefreshToken.schema';
@@ -19,6 +19,14 @@ if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
   console.error('❌ FATAL: JWT secrets not found in environment. Auth will fail.');
 }
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 function generateAccessToken(payload: JWTPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
 }
@@ -31,7 +39,6 @@ function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-// Validation schemas
 const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -44,7 +51,7 @@ const loginSchema = z.object({
 });
 
 // POST /api/auth/register
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', authLimiter, async (req: Request, res: Response) => {
   try {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -59,7 +66,7 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    
+
     const user = new UserModel({
       email,
       name,
@@ -73,7 +80,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     const refreshToken = generateRefreshToken();
     const tokenHash = hashToken(refreshToken);
-    
+
     await new RefreshTokenModel({
       tokenHash,
       userId: user.id,
@@ -101,7 +108,7 @@ router.post('/register', async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -112,7 +119,6 @@ router.post('/login', async (req: Request, res: Response) => {
     const user = await UserModel.findOne({ email });
 
     if (!user) {
-      // Prevent timing attacks by still running bcrypt
       await bcrypt.compare(password, '$2a$12$invalid.hash.to.prevent.timing.attacks');
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -124,7 +130,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const refreshToken = generateRefreshToken();
     const tokenHash = hashToken(refreshToken);
-    
+
     await new RefreshTokenModel({
       tokenHash,
       userId: user.id,
@@ -171,12 +177,11 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Token rotation: delete old, create new
     await RefreshTokenModel.deleteOne({ _id: savedToken._id });
 
     const newRefreshToken = generateRefreshToken();
     const newTokenHash = hashToken(newRefreshToken);
-    
+
     await new RefreshTokenModel({
       tokenHash: newTokenHash,
       userId: targetUser.id,
@@ -204,7 +209,6 @@ router.post('/refresh', async (req: Request, res: Response) => {
 router.get('/me', authenticateJWT, async (req: Request, res: Response) => {
   const user = await UserModel.findById(req.user!.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
-
   return res.json(user.toJSON());
 });
 
@@ -215,36 +219,8 @@ router.post('/logout', authenticateJWT, async (req: Request, res: Response) => {
     const tokenHash = hashToken(refreshToken);
     await RefreshTokenModel.deleteOne({ tokenHash });
   }
-
   res.clearCookie('refreshToken');
   return res.json({ message: 'Logged out successfully' });
-});
-
-// PATCH /api/users/me
-router.patch('/users/me', authenticateJWT, async (req: Request, res: Response) => {
-  const { name, avatarUrl } = req.body;
-  const update: Record<string, any> = {};
-  if (name) update.name = name;
-  if (avatarUrl) update.avatarUrl = avatarUrl;
-
-  const user = await UserModel.findByIdAndUpdate(
-    req.user!.userId,
-    { $set: update },
-    { new: true }
-  );
-
-  if (!user) return res.status(404).json({ error: 'User not found' });
-
-  return res.json(user.toJSON());
-});
-
-// DELETE /api/users/me (GDPR)
-router.delete('/users/me', authenticateJWT, async (req: Request, res: Response) => {
-  const userId = req.user!.userId;
-  await UserModel.findByIdAndDelete(userId);
-  await RefreshTokenModel.deleteMany({ userId });
-  res.clearCookie('refreshToken');
-  return res.json({ message: 'Account deleted successfully' });
 });
 
 export default router;

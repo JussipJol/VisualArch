@@ -29,12 +29,5 @@ const UserSchema = new Schema<IUserDocument>({
   }
 });
 
-// Helper for finding user by refresh token
-UserSchema.statics.findByRefreshToken = function(token: string) {
-  // Note: we still need to bcrypt.compare in the service, 
-  // but we can at least filter by indexed fields if we changed how we store it.
-  // For now, index helps even with a partial match if we used a prefix-based token.
-  return this.findOne({ refreshTokenHash: { $exists: true } }); 
-};
 
 export const UserModel = mongoose.model<IUserDocument>('User', UserSchema);
