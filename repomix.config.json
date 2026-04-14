@@ -1,0 +1,29 @@
+{
+  "output": {
+    "filePath": "repomix-output.md",
+    "style": "markdown",
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "topFilesLength": 20,
+    "showLineNumbers": false,
+    "copyToClipboard": false,
+    "headerText": "VisualArch Repository Context"
+  },
+  "include": [
+    "**/*"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/dist/**",
+    "**/.next/**",
+    "**/out/**",
+    "**/build/**",
+    "**/package-lock.json",
+    "**/yarn.lock",
+    "**/pnpm-lock.yaml",
+    "**/.env*",
+    "**/repomix-output.md",
+    "v2_xmls/**"
+  ]
+}

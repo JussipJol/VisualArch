@@ -7,6 +7,7 @@ export type WorkspaceRole = 'owner' | 'editor' | 'viewer';
 export type NodeStatus = 'stable' | 'modified' | 'new';
 export type ADRStatus = 'proposed' | 'accepted' | 'deprecated';
 export type TransactionType = 'purchase' | 'earn' | 'spend';
+export type TransactionStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type NotificationType = 'collab_invite' | 'comment_added' | 'generation_done' | 'adr_created';
 export type Severity = 'critical' | 'warning' | 'info';
 
@@ -86,7 +87,6 @@ export interface Workspace {
   architectureScore: number;
   lastCriticRun?: Date;
   archspecYaml?: string;
-  designData?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -142,6 +142,8 @@ export interface Transaction {
   type: TransactionType;
   amount: number;
   balanceAfter: number;
+  status: TransactionStatus;
+  referenceId?: string;
   meta: Record<string, unknown>;
   createdAt: Date;
 }

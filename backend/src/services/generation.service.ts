@@ -1,12 +1,13 @@
 import { ArchitectureData, ArchitectureNode, ArchitectureEdge, CriticFeedback, CriticIssue, CodeFile } from '../types';
 import { groqAdapter } from './ai/groq.adapter';
+import { getDiffSummary } from '../utils/diff';
+import { PromptBuilders } from './prompt.builders';
 
 const MOCK_DELAY = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 interface GenerationOptions {
   prompt: string;
   previousArchitecture?: ArchitectureData;
-  designData?: any;
   memoryContext?: string[];
   useStream?: boolean;
   onEvent?: (event: string, data: Record<string, unknown>) => void;
@@ -557,33 +558,13 @@ export class GenerationService {
       // Stage 1: Planning (LLM)
       onEvent?.('planning_start', { iteration: 1, memory_used: false });
       
-      const planPrompt = `
-        As a lead architect, design a system architecture for: "${prompt}"
-        Technical Requirements: Use modern stack (React, Node, etc. where applicable).
-        
-        Keep it to 4-8 nodes for a clean diagram.
-      `;
-
-      let finalPrompt = planPrompt;
-      if (options.designData) {
-        const designContext = this.parseDesignData(options.designData);
-        if (designContext) {
-          finalPrompt = `
-            Visual Design Context from User Sketch:
-            ${designContext}
-            
-            ${planPrompt}
-            
-            IMPORTANT: Prioritize components and relationships found in the Visual Design Context.
-          `;
-        }
-      }
-
+      const planPrompt = PromptBuilders.buildPlanningPrompt(prompt, null);
+      
       const plan = await groqAdapter.generateJson<{
         techStack: string[];
         nodes: any[];
         edges: any[];
-      }>(finalPrompt, undefined, options.signal);
+      }>(planPrompt, undefined, options.signal);
 
       const techStack = plan.techStack;
       const nodes: ArchitectureNode[] = plan.nodes.map((n, i) => ({
@@ -613,12 +594,7 @@ export class GenerationService {
       await Promise.all(nodes.map(async (node, i) => {
         onEvent?.('coding_node', { id: node.id, label: node.label, index: i + 1, total: nodes.length });
         
-        const codePrompt = `
-          Generate 2 core files (code and types) for the component: "${node.label}" (${node.description})
-          Context: High-level architecture for ${prompt}.
-          
-          Return JSON: { files: [{ name, path, content, language }] }
-        `;
+        const codePrompt = PromptBuilders.buildCodingPrompt(node.label, node.description, prompt);
 
         const codeResult = await groqAdapter.generateJson<{ files: CodeFile[] }>(codePrompt, undefined, options.signal);
         node.files = codeResult.files;
@@ -628,13 +604,7 @@ export class GenerationService {
 
       // Stage 3: Critique (LLM)
       onEvent?.('critique_start', {});
-      const criticPrompt = `
-        Analyze this architecture for: "${prompt}"
-        Tech Stack: ${techStack.join(', ')}
-        Nodes: ${nodes.map(n => n.label).join(', ')}
-        
-        Return JSON: { score: number (0-100), issues: [{ severity: 'critical'|'warning'|'info', title, description, suggestion }] }
-      `;
+      const criticPrompt = PromptBuilders.buildCritiquePrompt(prompt, techStack, nodes);
 
       const criticResult = await groqAdapter.generateJson<{ score: number; issues: CriticIssue[] }>(criticPrompt, undefined, options.signal);
       const criticFeedback: CriticFeedback = {
@@ -735,29 +705,22 @@ export class GenerationService {
       };
     }
 
-    const prompt = `
-      You are an Architectural Reconciliation Engine.
-      
-      Current Architecture JSON:
-      ${JSON.stringify(originalArch, null, 2)}
-      
-      User has modified the following system code:
-      ${modifiedFiles.map(f => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n')}
-      
-      TASK:
-      Analyze if these code changes imply changes to the architecture graph.
-      - Did the user add a new service dependency? (New Edge)
-      - Did the user implement a new component/database? (New Node)
-      - Did the user refactor a layer? (Update Node Metadata)
-      
-      Return a JSON object:
-      {
-        "architectureData": { ...updated nodes/edges JSON ... },
-        "report": "A human-readable report summarizing what was reconciled."
+    const diffs = modifiedFiles.map(f => {
+      // Try to find the original content in the architecture data
+      let originalContent = '';
+      for (const node of originalArch.nodes) {
+        const matchingFile = node.files?.find(originalFile => originalFile.path === f.path);
+        if (matchingFile) {
+          originalContent = matchingFile.content;
+          break;
+        }
       }
       
-      Keep the node IDs stable if they still exist. Only add or remove if absolutely implied by the code.
-    `;
+      const diff = getDiffSummary(originalContent, f.content);
+      return `--- FILE: ${f.path} ---\nDIFF SUMMARY:\n${diff}`;
+    });
+
+    const prompt = PromptBuilders.buildReconciliationPrompt(originalArch, diffs);
 
     const result = await groqAdapter.generateJson<{ architectureData: ArchitectureData; report: string }>(
       prompt,
@@ -766,48 +729,6 @@ export class GenerationService {
     );
 
     return result;
-  }
-
-  private parseDesignData(designData: any): string | null {
-    // Puck format: { content: [{ type, props: { ... } }], root: { props: { ... } } }
-    if (!designData || !designData.content || !Array.isArray(designData.content)) return null;
-
-    try {
-      const blocks = designData.content.map((block: any, idx: number) => {
-        const type = block.type || 'Unknown';
-        const props = block.props || {};
-        
-        let detail = '';
-        if (type === 'Heading') detail = `: "${props.title}" (level ${props.level})`;
-        if (type === 'Text') detail = `: "${props.text?.substring(0, 50)}..."`;
-        if (type === 'Hero') detail = `: "${props.title}" - ${props.description?.substring(0, 30)}...`;
-        if (type === 'Button') detail = `: "${props.label}" (${props.variant} variant)`;
-        if (type === 'Card') detail = `: "${props.title}" - ${props.content?.substring(0, 30)}...`;
-        if (type === 'FeatureGrid') {
-          const count = props.features?.length || 0;
-          detail = `: with ${count} features`;
-        }
-        if (type === 'Pricing') {
-          const tiers = props.tiers?.map((t: any) => t.plan).join(', ') || 'none';
-          detail = `: with tiers [${tiers}]`;
-        }
-        if (type === 'Navbar') {
-          const links = props.links?.map((l: any) => l.label).join(', ') || 'none';
-          detail = `: logo "${props.logo}" with links [${links}]`;
-        }
-        if (type === 'Contact') detail = `: title "${props.title}"`;
-        if (type === 'Container') detail = `: (layout container)`;
-
-        return `${idx + 1}. [Block: ${type}] ${detail}`;
-      });
-
-      if (blocks.length === 0) return null;
-
-      return `The user has structured the frontend prototype with these specific UI blocks:\n${blocks.join('\n')}`;
-    } catch (err) {
-      console.error('Failed to parse Puck design data:', err);
-      return null;
-    }
   }
 }
 

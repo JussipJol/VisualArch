@@ -8,6 +8,8 @@ const TransactionSchema = new Schema<ITransactionDocument>({
   type: { type: String, enum: ['purchase', 'earn', 'spend'], required: true },
   amount: { type: Number, required: true },
   balanceAfter: { type: Number, required: true },
+  status: { type: String, enum: ['pending', 'completed', 'failed', 'refunded'], default: 'completed', required: true },
+  referenceId: { type: String, index: true },
   meta: { type: Schema.Types.Mixed, default: {} },
 }, { 
   timestamps: true,

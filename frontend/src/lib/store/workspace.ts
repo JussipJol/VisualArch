@@ -80,8 +80,8 @@ interface WorkspaceState {
   generateArchitecture: (workspaceId: string, prompt: string, onProgress?: (p: GenerationProgress) => void) => Promise<ArchitectureData | null>;
   setSelectedNode: (node: ArchNode | null) => void;
   updatePendingFile: (path: string, content: string) => void;
-  saveDesignCanvas: (workspaceId: string, designData: any) => Promise<void>;
   syncCodeToArchitecture: (workspaceId: string) => Promise<void>;
+  isNodeDirty: (nodeId: string) => boolean;
   clearError: () => void;
 }
 
@@ -182,19 +182,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
   
-  saveDesignCanvas: async (workspaceId, designData) => {
-    try {
-      await api.patch(`/api/workspaces/${workspaceId}/design`, { designData });
-      set(state => ({
-        currentWorkspace: state.currentWorkspace 
-          ? { ...state.currentWorkspace, designData }
-          : null
-      }));
-    } catch (err) {
-      console.error('Failed to save design canvas:', err);
-    }
-  },
-
   setSelectedNode: (node) => set({ selectedNode: node }),
   
   updatePendingFile: (path, content) => set(state => ({
@@ -227,6 +214,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         generationProgress: { stage: 'error', message: err instanceof Error ? err.message : 'Sync failed' } 
       });
     }
+  },
+
+  isNodeDirty: (nodeId: string) => {
+    const { pendingCodeChanges, currentWorkspace } = get();
+    const node = currentWorkspace?.architectureData.nodes.find(n => n.id === nodeId);
+    if (!node || !node.files) return false;
+    return node.files.some(f => !!pendingCodeChanges[f.path]);
   },
 
   clearError: () => set({ error: null }),

@@ -15,10 +15,9 @@ import { ArchitectureScoreGauge } from '@/components/charts/ArchitectureScoreGau
 import { PromptSuggestions } from '@/components/ai-assistant/PromptSuggestions';
 import { IDEMode } from '@/components/workspace/IDEMode';
 import { ADRMode } from '@/components/workspace/ADRMode';
-import { DesignMode } from '@/components/workspace/DesignMode';
 import { useToastStore } from '@/lib/store/toast';
 
-type Mode = 'canvas' | 'ide' | 'design' | 'adr';
+type Mode = 'canvas' | 'ide' | 'adr';
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -65,7 +64,6 @@ export default function WorkspacePage() {
   const MODES: { id: Mode; icon: any; label: string }[] = [
     { id: 'canvas', icon: Layers, label: 'Canvas' },
     { id: 'ide', icon: Code2, label: 'IDE' },
-    { id: 'design', icon: PenTool, label: 'Design' },
     { id: 'adr', icon: FileText, label: 'ADR' },
   ];
 
@@ -135,7 +133,6 @@ export default function WorkspacePage() {
               />
             )}
             {mode === 'ide' && <IDEMode node={selectedNode} workspace={currentWorkspace} />}
-            {mode === 'design' && <DesignMode />}
             {mode === 'adr' && <ADRMode workspaceId={id} />}
           </div>
 

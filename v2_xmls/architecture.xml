@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project name="VisualArch_v2">
+    <Description>AI-driven software architecture prototyping and code scavenger platform.</Description>
+    <Architecture>
+        <Layer name="Backend">
+            <Stack>Node.js, Express, TypeScript, MongoDB, Socket.io</Stack>
+            <KeyComponents>
+                <Component name="GenerationService">AI-orchestrated planning, coding, and critique pipeline.</Component>
+                <Component name="WebSocketGateway">Optimized O(N) broadcaster for real-time collaboration.</Component>
+                <Component name="CreditsService">Atomic transactional system for AI usage meta-credits.</Component>
+            </KeyComponents>
+            <DataPersistence>MongoDB Atlas with Mongoose Schemas (History, ADRs, Comments, Workspaces).</DataPersistence>
+        </Layer>
+        <Layer name="Frontend">
+            <Stack>Next.js 14, React, Tailwind CSS, Puck UI</Stack>
+            <Features>
+                <Feature name="Cockpit Interface">Three-panel workspace for visual design, console, and documentation.</Feature>
+                <Feature name="Puck Builder">Component-driven UI prototyping that informs AI generation.</Feature>
+            </Features>
+        </Layer>
+        <Layer name="AI">
+            <Model>Groq Llama-3.3-70b-versatile</Model>
+            <Optimizations>Parallelized node generation, Exponential backoff for rate limits.</Optimizations>
+        </Layer>
+    </Architecture>
+    <Status>Version 3.0.0 (Migrated to MongoDB, Optimized WebSockets)</Status>
+</Project>

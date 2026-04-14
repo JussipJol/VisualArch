@@ -54,11 +54,11 @@ router.post('/', authenticateJWT, async (req: Request, res: Response) => {
   }
 
   // Atomic check and deduct credits
-  const deducted = await creditsService.deductCredits(userId, CREDITS_COSTS.CREATE_WORKSPACE, {
+  const transaction = await creditsService.deductCredits(userId, CREDITS_COSTS.CREATE_WORKSPACE, {
     action: 'create_workspace',
   });
 
-  if (!deducted) {
+  if (!transaction) {
     return res.status(402).json({ error: 'Insufficient credits', required: CREDITS_COSTS.CREATE_WORKSPACE });
   }
 
@@ -81,20 +81,6 @@ router.post('/', authenticateJWT, async (req: Request, res: Response) => {
 // GET /api/workspaces/:id
 router.get('/:id', authenticateJWT, requireWorkspaceMember('viewer'), (req: Request, res: Response) => {
   return res.json({ data: req.workspace });
-});
-
-// PATCH /api/workspaces/:id/design
-router.patch('/:id/design', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
-  const { designData } = req.body;
-  
-  const workspace = await WorkspaceModel.findByIdAndUpdate(
-    req.params.id,
-    { $set: { designData, updatedAt: new Date() } },
-    { new: true }
-  );
-
-  if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
-  return res.json({ data: workspace });
 });
 
 // PATCH /api/workspaces/:id
@@ -135,13 +121,13 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
   const estimatedNodeCount = 6; // estimated
   const creditsCost = creditsService.calculateGenerationCost(estimatedNodeCount);
 
-  const deducted = await creditsService.deductCredits(userId, creditsCost, {
+  const transaction = await creditsService.deductCredits(userId, creditsCost, {
     action: 'generate',
     workspaceId: workspace.id,
     prompt: prompt.substring(0, 100),
-  });
+  }, 'pending');
 
-  if (!deducted) {
+  if (!transaction) {
     return res.status(402).json({ error: 'Insufficient credits', required: creditsCost });
   }
 
@@ -177,6 +163,9 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
     });
     await historyEntry.save();
 
+    // Fulfill credit transaction
+    await creditsService.completeTransaction(transaction.id);
+
     return res.json({
       data: {
         architectureData: result.architectureData,
@@ -187,8 +176,8 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
       },
     });
   } catch (error) {
-    // Refund credits on failure
-    await creditsService.addCredits(userId, creditsCost, 'earn', { reason: 'generation_failed_refund' });
+    // Refund credits on failure using the transaction ID
+    await creditsService.refundTransaction(transaction.id, 'generation_failed');
     console.error('[Generation] Error:', error);
     return res.status(500).json({ error: 'Generation failed. Credits refunded.' });
   }
@@ -205,12 +194,12 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
   }
 
   const creditsCost = creditsService.calculateGenerationCost(6);
-  const deducted = await creditsService.deductCredits(userId, creditsCost, {
+  const transaction = await creditsService.deductCredits(userId, creditsCost, {
     action: 'generate_stream',
     workspaceId: workspace.id,
-  });
+  }, 'pending');
 
-  if (!deducted) {
+  if (!transaction) {
     return res.status(402).json({ error: 'Insufficient credits' });
   }
 
@@ -258,14 +247,18 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
     workspace.lastCriticRun = new Date();
     await WorkspaceModel.findByIdAndUpdate(workspace.id, { $set: workspace });
 
+    await creditsService.completeTransaction(transaction.id);
+
     clearInterval(heartbeat);
     if (!res.writableEnded) res.end();
   } catch (error: any) {
     clearInterval(heartbeat);
     if (error.name === 'AbortError') {
       console.log('[SSE] Task aborted successfully');
+      // Potentially refund if nothing was generated, but usually abort is user action
+      await creditsService.refundTransaction(transaction.id, 'user_aborted');
     } else {
-      await creditsService.addCredits(userId, creditsCost, 'earn', { reason: 'stream_generation_failed_refund' });
+      await creditsService.refundTransaction(transaction.id, 'stream_generation_failed');
       sendEvent('error', { message: 'Generation failed', stage: 'unknown', retry_available: true });
     }
     if (!res.writableEnded) res.end();
@@ -612,12 +605,12 @@ router.post('/:id/sync', authenticateJWT, requireWorkspaceMember('editor'), asyn
   }
 
   // Deduct credits for sync
-  const deducted = await creditsService.deductCredits(userId, CREDITS_COSTS.SYNC_RECONCILE, {
+  const transaction = await creditsService.deductCredits(userId, CREDITS_COSTS.SYNC_RECONCILE, {
     action: 'sync_architecture',
     workspaceId,
-  });
+  }, 'pending');
 
-  if (!deducted) {
+  if (!transaction) {
     return res.status(402).json({ error: 'Insufficient credits', required: CREDITS_COSTS.SYNC_RECONCILE });
   }
 
@@ -642,9 +635,12 @@ router.post('/:id/sync', authenticateJWT, requireWorkspaceMember('editor'), asyn
       type: 'info'
     });
 
+    await creditsService.completeTransaction(transaction.id);
+
     return res.json({ data: result.architectureData, report: result.report });
   } catch (err) {
     console.error('[Sync] Reconciliation failed:', err);
+    await creditsService.refundTransaction(transaction.id, 'sync_failed');
     return res.status(500).json({ error: 'Failed to synchronize architecture' });
   }
 });

@@ -28,7 +28,6 @@ const WorkspaceSchema = new Schema<IWorkspaceDocument>({
   architectureScore: { type: Number, default: 0 },
   lastCriticRun: { type: Date },
   archspecYaml: { type: String },
-  designData: { type: Schema.Types.Mixed },
 }, { 
   timestamps: true,
   toJSON: {

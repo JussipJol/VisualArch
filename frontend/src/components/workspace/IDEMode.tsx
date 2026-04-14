@@ -71,6 +71,9 @@ export function IDEMode({ node, workspace }: Props) {
               >
                 <div className={`w-1 h-3 rounded-full ${n.status === 'new' ? 'bg-success' : 'bg-accent'}`} />
                 <span className="truncate">{n.label}</span>
+                {useWorkspaceStore.getState().isNodeDirty(n.id) && (
+                  <div className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse ml-auto" title="Unsaved changes" />
+                )}
               </button>
               
               {activeNodeId === n.id && (
