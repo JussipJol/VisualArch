@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArchNode, CodeFile, useWorkspaceStore } from '@/lib/store/workspace';
+import { ArchNode, useWorkspaceStore } from '@/lib/store/workspace';
 import { MonacoEditor } from './MonacoEditor';
-import { Folder, FileJson, FileCode, CheckCircle2, Save, Wand2, Loader2, RefreshCw } from 'lucide-react';
+import { Folder, FileJson, FileCode, CheckCircle2, Wand2, RefreshCw, Code2 } from 'lucide-react';
 import { useToastStore } from '@/lib/store/toast';
 
 interface Props {
@@ -71,9 +71,6 @@ export function IDEMode({ node, workspace }: Props) {
               >
                 <div className={`w-1 h-3 rounded-full ${n.status === 'new' ? 'bg-success' : 'bg-accent'}`} />
                 <span className="truncate">{n.label}</span>
-                {useWorkspaceStore.getState().isNodeDirty(n.id) && (
-                  <div className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse ml-auto" title="Unsaved changes" />
-                )}
               </button>
               
               {activeNodeId === n.id && (
@@ -177,8 +174,3 @@ export function IDEMode({ node, workspace }: Props) {
     </div>
   );
 }
-
-// Re-using Code2 icon placeholder since IDEMode will be renamed or exported correctly
-const Code2 = ({ className }: { className?: string }) => (
-  <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-);

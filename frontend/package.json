@@ -23,7 +23,8 @@
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.4",
     "zustand": "^5.0.1",
-    "@monaco-editor/react": "^4.6.0"
+    "@monaco-editor/react": "^4.6.0",
+    "@measured/puck": "^0.17.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

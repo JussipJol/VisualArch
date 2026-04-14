@@ -18,7 +18,8 @@ export async function connectDatabase(): Promise<void> {
     console.log(`\n✅ MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`\n❌ Error connecting to MongoDB: ${error instanceof Error ? error.message : error}`);
-    process.exit(1);
+    console.warn('⚠️  Proceeding in persistent-mock mode (no DB).');
+    // Do not call process.exit(1) - allowed to fallback to InMemoryStore
   }
 }
 

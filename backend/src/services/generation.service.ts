@@ -1,14 +1,12 @@
 import { ArchitectureData, ArchitectureNode, ArchitectureEdge, CriticFeedback, CriticIssue, CodeFile } from '../types';
 import { groqAdapter } from './ai/groq.adapter';
-import { getDiffSummary } from '../utils/diff';
-import { PromptBuilders } from './prompt.builders';
-
-const MOCK_DELAY = (ms: number) => new Promise(r => setTimeout(r, ms));
+import { generateCodeFiles, generateTestFiles } from './code-generator';
+import { generateMockArchitecture, MOCK_DELAY } from './mock-engine';
 
 interface GenerationOptions {
   prompt: string;
   previousArchitecture?: ArchitectureData;
-  memoryContext?: string[];
+  designData?: any;
   useStream?: boolean;
   onEvent?: (event: string, data: Record<string, unknown>) => void;
   signal?: AbortSignal;
@@ -22,713 +20,343 @@ interface GenerationResult {
   modelUsed: string;
 }
 
-// Tech stack detection from prompt
-function detectTechStack(prompt: string): string[] {
-  const techMap: Record<string, string[]> = {
-    react: ['React', 'TypeScript', 'Vite'],
-    next: ['Next.js', 'TypeScript', 'Tailwind CSS'],
-    vue: ['Vue.js', 'TypeScript', 'Vite'],
-    angular: ['Angular', 'TypeScript', 'RxJS'],
-    node: ['Node.js', 'Express', 'TypeScript'],
-    python: ['Python', 'FastAPI', 'SQLAlchemy'],
-    django: ['Python', 'Django', 'PostgreSQL'],
-    mongo: ['MongoDB', 'Mongoose'],
-    postgres: ['PostgreSQL'],
-    redis: ['Redis'],
-    docker: ['Docker', 'Docker Compose'],
-    kubernetes: ['Kubernetes', 'Helm'],
-    aws: ['AWS', 'S3', 'Lambda'],
-    stripe: ['Stripe'],
-    auth: ['JWT', 'bcrypt'],
-    microservices: ['Docker', 'Redis', 'RabbitMQ'],
-    graphql: ['GraphQL', 'Apollo'],
-    socket: ['Socket.io', 'WebSocket'],
-  };
-
-  const detected = new Set<string>();
-  const lower = prompt.toLowerCase();
-  for (const [key, techs] of Object.entries(techMap)) {
-    if (lower.includes(key)) techs.forEach(t => detected.add(t));
-  }
-
-  // Default stack
-  if (detected.size === 0) {
-    ['Node.js', 'React', 'MongoDB', 'TypeScript'].forEach(t => detected.add(t));
-  }
-
-  return Array.from(detected);
-}
-
-// Generate a realistic node graph from prompt
-function generateNodes(prompt: string, previousArch?: ArchitectureData): { nodes: ArchitectureNode[]; edges: ArchitectureEdge[] } {
-  const lower = prompt.toLowerCase();
-
-  // Determine architecture type from prompt
-  const isEcommerce = lower.includes('ecommerce') || lower.includes('shop') || lower.includes('store');
-  const isAuth = lower.includes('auth') || lower.includes('login') || lower.includes('register');
-  const isMicroservices = lower.includes('microservices') || lower.includes('micro service');
-  const isRealtime = lower.includes('real-time') || lower.includes('realtime') || lower.includes('chat') || lower.includes('socket');
-  const isAPI = lower.includes('api') || lower.includes('rest') || lower.includes('backend');
-
-  let nodeTemplates: Omit<ArchitectureNode, 'id'>[] = [];
-
-  if (isEcommerce) {
-    nodeTemplates = [
-      { label: 'API Gateway', layer: 'Gateway', description: 'Rate limiting, routing, auth middleware', status: 'new', position: { x: 400, y: 80 }, files: [], testFiles: [] },
-      { label: 'Auth Service', layer: 'Services', description: 'JWT + OAuth2, bcrypt password hashing', status: 'new', position: { x: 100, y: 240 }, files: [], testFiles: [] },
-      { label: 'Product Service', layer: 'Services', description: 'Product catalog, search, inventory', status: 'new', position: { x: 300, y: 240 }, files: [], testFiles: [] },
-      { label: 'Order Service', layer: 'Services', description: 'Order lifecycle, payment processing', status: 'new', position: { x: 500, y: 240 }, files: [], testFiles: [] },
-      { label: 'Notification Service', layer: 'Services', description: 'Email, SMS, push notifications', status: 'new', position: { x: 700, y: 240 }, files: [], testFiles: [] },
-      { label: 'MongoDB', layer: 'Database', description: 'Products, orders, users collections', status: 'new', position: { x: 300, y: 420 }, files: [], testFiles: [] },
-      { label: 'Redis Cache', layer: 'Cache', description: 'Session store, product cache, rate limits', status: 'new', position: { x: 550, y: 420 }, files: [], testFiles: [] },
-      { label: 'Message Queue', layer: 'Infrastructure', description: 'Async event processing via RabbitMQ', status: 'new', position: { x: 700, y: 420 }, files: [], testFiles: [] },
-    ];
-  } else if (isMicroservices) {
-    nodeTemplates = [
-      { label: 'API Gateway', layer: 'Gateway', description: 'Central entry, load balancing, auth', status: 'new', position: { x: 400, y: 80 }, files: [], testFiles: [] },
-      { label: 'User Service', layer: 'Services', description: 'User CRUD, profile management', status: 'new', position: { x: 150, y: 240 }, files: [], testFiles: [] },
-      { label: 'Core Service', layer: 'Services', description: 'Business logic, domain operations', status: 'new', position: { x: 400, y: 240 }, files: [], testFiles: [] },
-      { label: 'Analytics Service', layer: 'Services', description: 'Events, metrics, reporting', status: 'new', position: { x: 650, y: 240 }, files: [], testFiles: [] },
-      { label: 'Service Discovery', layer: 'Infrastructure', description: 'Consul/Eureka service registry', status: 'new', position: { x: 150, y: 420 }, files: [], testFiles: [] },
-      { label: 'Primary DB', layer: 'Database', description: 'PostgreSQL for transactional data', status: 'new', position: { x: 400, y: 420 }, files: [], testFiles: [] },
-      { label: 'Redis', layer: 'Cache', description: 'Distributed cache, pub/sub', status: 'new', position: { x: 650, y: 420 }, files: [], testFiles: [] },
-    ];
-  } else if (isRealtime) {
-    nodeTemplates = [
-      { label: 'Next.js Frontend', layer: 'Frontend', description: 'React UI with real-time updates', status: 'new', position: { x: 400, y: 80 }, files: [], testFiles: [] },
-      { label: 'Express API', layer: 'Backend', description: 'REST + WebSocket server', status: 'new', position: { x: 200, y: 240 }, files: [], testFiles: [] },
-      { label: 'Socket.io Server', layer: 'Realtime', description: 'WebSocket rooms, presence, events', status: 'new', position: { x: 550, y: 240 }, files: [], testFiles: [] },
-      { label: 'Auth Module', layer: 'Auth', description: 'JWT tokens, session management', status: 'new', position: { x: 100, y: 420 }, files: [], testFiles: [] },
-      { label: 'MongoDB', layer: 'Database', description: 'Messages, users, rooms', status: 'new', position: { x: 350, y: 420 }, files: [], testFiles: [] },
-      { label: 'Redis Pub/Sub', layer: 'Cache', description: 'Horizontal scaling for WebSocket', status: 'new', position: { x: 600, y: 420 }, files: [], testFiles: [] },
-    ];
-  } else {
-    // Generic web app
-    nodeTemplates = [
-      { label: 'Frontend (React)', layer: 'Frontend', description: 'SPA with responsive UI', status: 'new', position: { x: 400, y: 80 }, files: [], testFiles: [] },
-      { label: 'API Server', layer: 'Backend', description: 'Express REST API with TypeScript', status: 'new', position: { x: 400, y: 240 }, files: [], testFiles: [] },
-      { label: 'Auth Module', layer: 'Auth', description: 'JWT + refresh tokens, RBAC', status: 'new', position: { x: 100, y: 240 }, files: [], testFiles: [] },
-      { label: 'Database (MongoDB)', layer: 'Database', description: 'Primary data store', status: 'new', position: { x: 250, y: 420 }, files: [], testFiles: [] },
-      { label: 'Redis Cache', layer: 'Cache', description: 'Session cache, rate limiting', status: 'new', position: { x: 550, y: 420 }, files: [], testFiles: [] },
-    ];
-
-    if (isAuth) {
-      nodeTemplates.push(
-        { label: 'Email Service', layer: 'Services', description: 'Transactional emails via Resend', status: 'new', position: { x: 700, y: 240 }, files: [], testFiles: [] }
-      );
-    }
-  }
-
-  // Handle incremental generation
-  if (previousArch) {
-    nodeTemplates = nodeTemplates.map((n, i) => {
-      const prevNode = previousArch.nodes[i];
-      if (prevNode) {
-        return { ...n, status: 'modified' as const, position: prevNode.position };
-      }
-      return n;
-    });
-  }
-
-  // Generate IDs and code files
-  const nodes: ArchitectureNode[] = nodeTemplates.map((n, i) => ({
-    ...n,
-    id: `node-${i + 1}`,
-    files: generateCodeFiles(n.label, n.layer),
-    testFiles: generateTestFiles(n.label),
-  }));
-
-  // Generate edges
-  const edges: ArchitectureEdge[] = [];
-  for (let i = 1; i < nodes.length; i++) {
-    if (i <= 3) {
-      edges.push({ id: `e-0-${i}`, source: nodes[0].id, target: nodes[i].id, label: 'http' });
-    }
-    if (i >= nodes.length - 2) {
-      const mid = Math.floor(nodes.length / 2);
-      edges.push({ id: `e-${mid}-${i}`, source: nodes[mid].id, target: nodes[i].id, label: 'db' });
-    }
-  }
-
-  return { nodes, edges };
-}
-
-function generateCodeFiles(label: string, layer: string): CodeFile[] {
-  const sanitized = label.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-
-  if (layer === 'Frontend') {
-    return [
-      {
-        name: `${sanitized}.tsx`,
-        path: `src/components/${sanitized}.tsx`,
-        language: 'typescript',
-        content: `import React, { useState, useEffect } from 'react';
-import { api } from '@/lib/api';
-
-interface ${label.replace(/\s/g, '')}Props {
-  className?: string;
-}
-
-export const ${label.replace(/\s/g, '')}: React.FC<${label.replace(/\s/g, '')}Props> = ({ className }) => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await api.get('/api/data');
-        setData(response.data);
-      } catch (err) {
-        setError('Failed to load data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  if (loading) return <div className="loading-spinner" />;
-  if (error) return <div className="error-message">{error}</div>;
-
-  return (
-    <div className={\`${sanitized}-container \${className ?? ''}\`}>
-      <h2>${label}</h2>
-      <pre>{JSON.stringify(data, null, 2)}</pre>
-    </div>
-  );
-};
-
-export default ${label.replace(/\s/g, '')};
-`,
-      },
-    ];
-  }
-
-  if (layer === 'Backend' || layer === 'Services' || layer === 'Gateway') {
-    return [
-      {
-        name: `${sanitized}.router.ts`,
-        path: `src/routes/${sanitized}.ts`,
-        language: 'typescript',
-        content: `import { Router, Request, Response } from 'express';
-import { ${sanitized}Service } from '../services/${sanitized}.service';
-import { authenticateJWT } from '../middleware/auth';
-
-const router = Router();
-const service = new ${sanitized.charAt(0).toUpperCase() + sanitized.slice(1)}Service();
-
-/**
- * GET /${sanitized}
- * Returns all ${label} resources
- */
-router.get('/', authenticateJWT, async (req: Request, res: Response) => {
-  try {
-    const data = await service.getAll(req.user!.userId);
-    res.json({ data, timestamp: new Date().toISOString() });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    res.status(500).json({ error: message });
-  }
-});
-
-/**
- * POST /${sanitized}
- * Create new ${label} resource
- */
-router.post('/', authenticateJWT, async (req: Request, res: Response) => {
-  try {
-    const created = await service.create(req.user!.userId, req.body);
-    res.status(201).json({ data: created });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    res.status(400).json({ error: message });
-  }
-});
-
-/**
- * GET /${sanitized}/:id
- * Returns specific ${label} resource
- */
-router.get('/:id', authenticateJWT, async (req: Request, res: Response) => {
-  try {
-    const item = await service.getById(req.params.id);
-    if (!item) return res.status(404).json({ error: 'Not found' });
-    res.json({ data: item });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    res.status(500).json({ error: message });
-  }
-});
-
-/**
- * PATCH /${sanitized}/:id
- * Update ${label} resource
- */
-router.patch('/:id', authenticateJWT, async (req: Request, res: Response) => {
-  try {
-    const updated = await service.update(req.params.id, req.body);
-    res.json({ data: updated });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    res.status(400).json({ error: message });
-  }
-});
-
-/**
- * DELETE /${sanitized}/:id
- * Delete ${label} resource
- */
-router.delete('/:id', authenticateJWT, async (req: Request, res: Response) => {
-  try {
-    await service.delete(req.params.id);
-    res.status(204).send();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    res.status(500).json({ error: message });
-  }
-});
-
-export default router;
-`,
-      },
-      {
-        name: `${sanitized}.service.ts`,
-        path: `src/services/${sanitized}.service.ts`,
-        language: 'typescript',
-        content: `/**
- * ${label} Service
- * Business logic layer for ${label} operations
- */
-export class ${sanitized.charAt(0).toUpperCase() + sanitized.slice(1)}Service {
-  async getAll(userId: string): Promise<unknown[]> {
-    // Implementation: query database with user context
-    return [];
-  }
-
-  async getById(id: string): Promise<unknown | null> {
-    // Implementation: fetch by ID with auth check
-    return null;
-  }
-
-  async create(userId: string, data: unknown): Promise<unknown> {
-    // Implementation: validate, persist, return created resource
-    return { id: 'generated-id', ...( data as object), createdBy: userId };
-  }
-
-  async update(id: string, data: unknown): Promise<unknown> {
-    // Implementation: optimistic locking, patch operations
-    return { id, ...( data as object), updatedAt: new Date() };
-  }
-
-  async delete(id: string): Promise<void> {
-    // Implementation: soft delete or cascade
-  }
-}
-`,
-      },
-    ];
-  }
-
-  if (layer === 'Database') {
-    return [
-      {
-        name: `schema.ts`,
-        path: `src/models/schema.ts`,
-        language: 'typescript',
-        content: `import { z } from 'zod';
-
-// ${label} Schema (Zod validation)
-export const ${sanitized}Schema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1).max(100),
-  description: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
-  createdAt: z.date().default(() => new Date()),
-  updatedAt: z.date().default(() => new Date()),
-});
-
-export type ${sanitized.charAt(0).toUpperCase() + sanitized.slice(1)}Type = z.infer<typeof ${sanitized}Schema>;
-
-// MongoDB Index definitions
-export const ${sanitized}Indexes = [
-  { key: { createdAt: -1 }, name: 'idx_created_desc' },
-  { key: { name: 'text' }, name: 'idx_name_text' },
-];
-`,
-      },
-    ];
-  }
-
-  return [
-    {
-      name: `${sanitized}.ts`,
-      path: `src/${sanitized}.ts`,
-      language: 'typescript',
-      content: `/**
- * ${label} Module
- * ${label} configuration and initialization
- */
-export interface ${label.replace(/\s/g, '')}Config {
-  enabled: boolean;
-  options?: Record<string, unknown>;
-}
-
-export async function initialize${label.replace(/\s/g, '')}(config: ${label.replace(/\s/g, '')}Config): Promise<void> {
-  if (!config.enabled) {
-    console.log('[${label}] Disabled, skipping initialization');
-    return;
-  }
-  console.log('[${label}] Initialized successfully');
-}
-`,
-    },
-  ];
-}
-
-function generateTestFiles(label: string): CodeFile[] {
-  const sanitized = label.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  return [
-    {
-      name: `${sanitized}.test.ts`,
-      path: `src/__tests__/${sanitized}.test.ts`,
-      language: 'typescript',
-      content: `import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-
-/**
- * ${label} - Unit Tests
- * Generated by VisualArch AI Test Scaffolding
- */
-describe('${label}', () => {
-  beforeEach(() => {
-    // Setup test environment
-    jest.clearAllMocks();
-  });
-
-  afterEach(() => {
-    // Cleanup
-  });
-
-  describe('Happy Path', () => {
-    it('should initialize successfully', async () => {
-      // Arrange
-      const config = { enabled: true };
-
-      // Act & Assert
-      expect(config.enabled).toBe(true);
-    });
-
-    it('should handle valid input correctly', () => {
-      // Arrange
-      const input = { name: 'test', value: 42 };
-
-      // Act
-      const result = { ...input, processed: true };
-
-      // Assert
-      expect(result.name).toBe('test');
-      expect(result.processed).toBe(true);
-    });
-  });
-
-  describe('Error Scenarios', () => {
-    it('should reject invalid input', () => {
-      expect(() => {
-        if (!null) throw new Error('Invalid input');
-      }).toThrow('Invalid input');
-    });
-
-    it('should handle network errors gracefully', async () => {
-      const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
-      await expect(mockFetch()).rejects.toThrow('Network error');
-    });
-  });
-
-  describe('Edge Cases', () => {
-    it('should handle empty data', () => {
-      const empty: unknown[] = [];
-      expect(empty).toHaveLength(0);
-    });
-
-    it('should handle concurrent requests', async () => {
-      const requests = Array.from({ length: 5 }, (_, i) =>
-        Promise.resolve(\`Result \${i}\`)
-      );
-      const results = await Promise.all(requests);
-      expect(results).toHaveLength(5);
-    });
-  });
-});
-`,
-    },
-  ];
-}
-
-// Architecture score calculation
-function calculateArchitectureScore(nodes: ArchitectureNode[], edges: ArchitectureEdge[]): number {
-  const hasGateway = nodes.some(n => n.layer === 'Gateway');
-  const hasAuth = nodes.some(n => n.layer === 'Auth' || n.label.toLowerCase().includes('auth'));
-  const hasCache = nodes.some(n => n.layer === 'Cache');
-  const hasDB = nodes.some(n => n.layer === 'Database');
-  const hasTests = nodes.every(n => n.testFiles && n.testFiles.length > 0);
-  const avgConnections = edges.length / Math.max(nodes.length, 1);
-
-  let score = 40;
-  if (hasGateway) score += 15;
-  if (hasAuth) score += 15;
-  if (hasCache) score += 10;
-  if (hasDB) score += 10;
-  if (hasTests) score += 10;
-  if (avgConnections > 0.5) score += 5;
-  if (nodes.length >= 5) score += 5;
-
-  return Math.min(score, 100);
-}
-
-// Generate critic feedback
-function generateCriticFeedback(nodes: ArchitectureNode[], score: number): CriticFeedback {
-  const issues: CriticIssue[] = [];
-
-  const hasAuth = nodes.some(n => n.label.toLowerCase().includes('auth'));
-  const hasRateLimit = nodes.some(n => n.description.toLowerCase().includes('rate'));
-  const hasErrorHandling = nodes.some(n => n.description.toLowerCase().includes('error'));
-  const hasMonitoring = nodes.some(n => n.label.toLowerCase().includes('monitor') || n.label.toLowerCase().includes('log'));
-
-  if (!hasAuth) {
-    issues.push({
-      severity: 'critical',
-      title: 'Missing Authentication Layer',
-      description: 'No authentication service detected. All API endpoints are potentially unprotected.',
-      suggestion: 'Add an Auth Service with JWT validation and RBAC middleware',
-    });
-  }
-
-  if (!hasRateLimit) {
-    issues.push({
-      severity: 'warning',
-      title: 'No Rate Limiting Configured',
-      description: 'API endpoints appear to lack rate limiting, making the system vulnerable to abuse.',
-      suggestion: 'Add Redis-backed rate limiting to the API Gateway',
-    });
-  }
-
-  if (!hasErrorHandling) {
-    issues.push({
-      severity: 'warning',
-      title: 'Error Handling Not Explicit',
-      description: 'Global error handling strategy is not visible in the architecture.',
-      suggestion: 'Add an error boundary / global error handler in the API layer',
-    });
-  }
-
-  if (!hasMonitoring) {
-    issues.push({
-      severity: 'info',
-      title: 'Monitoring Not Configured',
-      description: 'No observability layer (logging, metrics, tracing) is visible.',
-      suggestion: 'Add Sentry for error tracking and structured logging',
-    });
-  }
-
-  if (nodes.length > 8) {
-    issues.push({
-      severity: 'info',
-      title: 'High Architectural Complexity',
-      description: `${nodes.length} components increases operational overhead.`,
-      suggestion: 'Consider consolidating services that have similar bounded contexts',
-    });
-  }
-
-  return { score, issues, timestamp: new Date() };
-}
-
 export class GenerationService {
+  // ─── Main entry point ────────────────────────────────────────────────────────
+
   async generate(options: GenerationOptions): Promise<GenerationResult> {
     const startTime = Date.now();
-    const { prompt, previousArchitecture, onEvent } = options;
+    const { prompt, previousArchitecture, onEvent, signal } = options;
 
     if (!groqAdapter.isEnabled) {
-      return this.generateMock(options, startTime);
+      const mock = await generateMockArchitecture(prompt, previousArchitecture, onEvent, signal);
+      return {
+        ...mock,
+        totalTimeMs: Date.now() - startTime,
+      };
     }
 
     try {
-      // Stage 0: Context & Memory
-      onEvent?.('memory_retrieved', { count: 0, relevant_decisions: [] });
-
-      // Stage 1: Planning (LLM)
-      onEvent?.('planning_start', { iteration: 1, memory_used: false });
-      
-      const planPrompt = PromptBuilders.buildPlanningPrompt(prompt, null);
-      
-      const plan = await groqAdapter.generateJson<{
-        techStack: string[];
-        nodes: any[];
-        edges: any[];
-      }>(planPrompt, undefined, options.signal);
-
-      const techStack = plan.techStack;
-      const nodes: ArchitectureNode[] = plan.nodes.map((n, i) => ({
-        ...n,
-        id: `node-${i + 1}`,
-        status: 'new',
-        files: [],
-        testFiles: [],
-      }));
-
-      const edges: ArchitectureEdge[] = plan.edges.map((e, i) => {
-        const source = nodes.find(n => n.label === e.sourceLabel);
-        const target = nodes.find(n => n.label === e.targetLabel);
-        return {
-          id: `e-${i}`,
-          source: source?.id ?? 'node-1',
-          target: target?.id ?? 'node-2',
-          label: e.label,
-        };
-      });
-
-      onEvent?.('planning_done', { node_count: nodes.length, tech_stack: techStack });
-
-      // Stage 2: Coding (Parallel)
-      onEvent?.('coding_start', { total: nodes.length });
-      
-      await Promise.all(nodes.map(async (node, i) => {
-        onEvent?.('coding_node', { id: node.id, label: node.label, index: i + 1, total: nodes.length });
-        
-        const codePrompt = PromptBuilders.buildCodingPrompt(node.label, node.description, prompt);
-
-        const codeResult = await groqAdapter.generateJson<{ files: CodeFile[] }>(codePrompt, undefined, options.signal);
-        node.files = codeResult.files;
-        
-        onEvent?.('node_done', { id: node.id, label: node.label, file_count: node.files.length });
-      }));
-
-      // Stage 3: Critique (LLM)
-      onEvent?.('critique_start', {});
-      const criticPrompt = PromptBuilders.buildCritiquePrompt(prompt, techStack, nodes);
-
-      const criticResult = await groqAdapter.generateJson<{ score: number; issues: CriticIssue[] }>(criticPrompt, undefined, options.signal);
-      const criticFeedback: CriticFeedback = {
-        score: criticResult.score,
-        issues: criticResult.issues,
-        timestamp: new Date(),
-      };
-
-      onEvent?.('critique_done', { score: criticFeedback.score, issues_count: criticFeedback.issues.length });
-
-      const architectureData: ArchitectureData = {
-        nodes, edges, techStack, layoutDirection: 'TB',
-      };
-
-      const creditsUsed = nodes.length * 10;
-      const totalTimeMs = Date.now() - startTime;
-
-      onEvent?.('complete', { architecture_data: architectureData, credits_used: creditsUsed });
-
-      return { architectureData, criticFeedback, totalTimeMs, creditsUsed, modelUsed: 'llama-3.3-70b-versatile' };
+      return await this.generateWithAI(options, startTime);
     } catch (error: any) {
-      console.error('[AI Generation] Pipeline failed, falling back to mock:', error.message || error);
-      onEvent?.('ai_fallback', { reason: error.message || 'AI request failed', model: 'mock-engine' });
-      return this.generateMock(options, startTime);
+      console.error('[AI Generation] Pipeline failed, falling back to mock:', error.message ?? error);
+      onEvent?.('ai_fallback', { reason: error.message ?? 'AI request failed', model: 'mock-engine' });
+
+      const mock = await generateMockArchitecture(prompt, previousArchitecture, onEvent, signal);
+      return { ...mock, totalTimeMs: Date.now() - startTime };
     }
   }
 
-  // Fallback / original mock logic moved here
-  private async generateMock(options: GenerationOptions, startTime: number): Promise<GenerationResult> {
-    const { prompt, previousArchitecture, onEvent } = options;
-    // ... existing mock logic ...
-    // (I will keep the existing logic in a separate method for dev/demo safety)
-    await MOCK_DELAY(500);
-    const techStack = detectTechStack(prompt);
-    const { nodes, edges } = generateNodes(prompt, previousArchitecture);
-    const score = calculateArchitectureScore(nodes, edges);
-    const criticFeedback = generateCriticFeedback(nodes, score);
-    
-    const architectureData: ArchitectureData = { nodes, edges, techStack, layoutDirection: 'TB' };
-    const creditsUsed = 10;
+  // ─── AI pipeline (4 stages) ──────────────────────────────────────────────────
+
+  private async generateWithAI(options: GenerationOptions, startTime: number): Promise<GenerationResult> {
+    const { prompt, previousArchitecture, designData, onEvent, signal } = options;
+
+    // Stage 0 – memory
+    onEvent?.('memory_retrieved', { count: 0, relevant_decisions: [] });
+
+    // Stage 1 – planning
+    onEvent?.('planning_start', { iteration: 1, memory_used: false });
+
+    let planPrompt = `
+      As a lead software architect, design a system architecture for: "${prompt}"
+      Use a modern, production-ready tech stack (React, Node.js, etc. where applicable).
+      Return 4-8 nodes for a clean, readable diagram.
+
+      Return JSON:
+      {
+        "techStack": string[],
+        "nodes": [{ "label": string, "layer": string, "description": string, "position": { "x": number, "y": number } }],
+        "edges": [{ "sourceLabel": string, "targetLabel": string, "label": string }]
+      }
+    `;
+
+    if (designData) {
+      const designContext = this.parseDesignData(designData);
+      if (designContext) {
+        planPrompt = `
+          Visual Design Context from User Sketch:
+          ${designContext}
+
+          ${planPrompt}
+
+          IMPORTANT: Prioritize components and relationships visible in the Visual Design Context.
+        `;
+      }
+    }
+
+    const plan = await groqAdapter.generateJson<{
+      techStack: string[];
+      nodes: any[];
+      edges: any[];
+    }>(planPrompt, undefined, signal);
+
+    const nodes: ArchitectureNode[] = plan.nodes.map((n: any, i: number) => ({
+      ...n,
+      id: `node-${i + 1}`,
+      status: 'new' as const,
+      files: [],
+      testFiles: [],
+    }));
+
+    const edges: ArchitectureEdge[] = plan.edges.map((e: any, i: number) => {
+      const source = nodes.find(n => n.label === e.sourceLabel);
+      const target = nodes.find(n => n.label === e.targetLabel);
+      return {
+        id: `e-${i}`,
+        source: source?.id ?? nodes[0]?.id ?? 'node-1',
+        target: target?.id ?? nodes[1]?.id ?? 'node-2',
+        label: e.label,
+      };
+    });
+
+    onEvent?.('planning_done', { node_count: nodes.length, tech_stack: plan.techStack });
+
+    // Stage 2 – code generation (parallel per node)
+    onEvent?.('coding_start', { total: nodes.length });
+
+    await Promise.all(nodes.map(async (node, i) => {
+      if (signal?.aborted) return;
+      onEvent?.('coding_node', { id: node.id, label: node.label, index: i + 1, total: nodes.length });
+
+      try {
+        const codePrompt = `
+          Generate 2 production-ready files for the component: "${node.label}" (${node.description})
+          System context: ${prompt}
+
+          Return JSON: { "files": [{ "name": string, "path": string, "content": string, "language": string }] }
+        `;
+        const codeResult = await groqAdapter.generateJson<{ files: CodeFile[] }>(codePrompt, undefined, signal);
+        node.files = codeResult.files ?? generateCodeFiles(node.label, node.layer);
+      } catch {
+        node.files = generateCodeFiles(node.label, node.layer);
+      }
+
+      node.testFiles = generateTestFiles(node.label);
+      onEvent?.('node_done', { id: node.id, label: node.label, file_count: node.files.length });
+    }));
+
+    // Stage 3 – critique
+    onEvent?.('critique_start', {});
+
+    const criticPrompt = `
+      Analyze this architecture for: "${prompt}"
+      Tech Stack: ${plan.techStack.join(', ')}
+      Components: ${nodes.map(n => `${n.label} (${n.layer})`).join(', ')}
+
+      Check for: circular dependencies, missing auth, missing error handling,
+      security holes, God Objects, tight coupling, missing observability.
+
+      Return JSON:
+      {
+        "score": number (0-100),
+        "issues": [{ "severity": "critical"|"warning"|"info", "title": string, "description": string, "suggestion": string }]
+      }
+    `;
+
+    const criticResult = await groqAdapter.generateJson<{
+      score: number;
+      issues: CriticIssue[];
+    }>(criticPrompt, undefined, signal);
+
+    const criticFeedback: CriticFeedback = {
+      score: Math.max(0, Math.min(100, criticResult.score)),
+      issues: criticResult.issues ?? [],
+      timestamp: new Date(),
+    };
+
+    onEvent?.('critique_done', { score: criticFeedback.score, issues_count: criticFeedback.issues.length });
+
+    const architectureData: ArchitectureData = {
+      nodes,
+      edges,
+      techStack: plan.techStack,
+      layoutDirection: 'TB',
+    };
+
+    const creditsUsed = nodes.length * 10;
     const totalTimeMs = Date.now() - startTime;
-    
-    onEvent?.('complete', { architecture_data: architectureData, credits_used: creditsUsed });
-    return { architectureData, criticFeedback, totalTimeMs, creditsUsed, modelUsed: 'mock-engine' };
+
+    return { architectureData, criticFeedback, totalTimeMs, creditsUsed, modelUsed: 'llama-3.3-70b-versatile' };
   }
+
+  // ─── CI/CD config generation ─────────────────────────────────────────────────
 
   async generateCICDConfig(workspaceId: string, techStack: string[], platform: string): Promise<string> {
     if (!groqAdapter.isEnabled) {
-      await MOCK_DELAY(1000);
-      return `# Mock CI/CD for ${platform}\n# Tech Stack: ${techStack.join(', ')}\n\nversion: 1.0\nsteps:\n  - build: npm run build\n  - test: npm test\n  - deploy: # TODO: add ${platform} credentials`;
+      await MOCK_DELAY(600);
+      return this.mockCICDConfig(techStack, platform);
     }
 
     const prompt = `
-      Generate a professional CI/CD configuration (YAML) for the following workspace:
-      Workspace ID: ${workspaceId}
+      Generate a professional CI/CD configuration (YAML) for:
       Tech Stack: ${techStack.join(', ')}
       Target Platform: ${platform}
-      
-      Include steps for build, test, and deployment to ${platform}.
-      Return ONLY the YAML content without markdown blocks.
+
+      Include build, test, lint, and deployment steps.
+      Return ONLY valid YAML — no markdown fences.
     `;
 
-    return groqAdapter.generateText(prompt, undefined, undefined);
+    return groqAdapter.generateText(prompt);
   }
 
-  async generateADR(workspaceId: string, nodeLabel: string, context: string): Promise<{
-    title: string; decision: string; consequences: string; alternatives: string[];
-  }> {
+  private mockCICDConfig(techStack: string[], platform: string): string {
+    const hasNode = techStack.some(t => t.toLowerCase().includes('node') || t.toLowerCase().includes('next'));
+    const hasPython = techStack.some(t => t.toLowerCase().includes('python'));
+
+    if (platform === 'github-actions') {
+      return `name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup ${hasNode ? 'Node.js' : hasPython ? 'Python' : 'Environment'}
+        uses: ${hasNode ? 'actions/setup-node@v4' : 'actions/setup-python@v5'}
+        with:
+          ${hasNode ? "node-version: '20'\n          cache: 'npm'" : "python-version: '3.12'"}
+      - name: Install dependencies
+        run: ${hasNode ? 'npm ci' : 'pip install -r requirements.txt'}
+      - name: Run tests
+        run: ${hasNode ? 'npm test' : 'pytest'}
+      - name: Build
+        run: ${hasNode ? 'npm run build' : 'echo "Build step"'}
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to ${platform}
+        run: echo "Deploy to ${platform}"
+        env:
+          DEPLOY_TOKEN: \${{ secrets.DEPLOY_TOKEN }}
+`;
+    }
+
+    return `# CI/CD for ${platform}
+# Tech Stack: ${techStack.join(', ')}
+
+build:
+  - ${hasNode ? 'npm check && npm run build' : 'pip install -r requirements.txt'}
+
+test:
+  - ${hasNode ? 'npm test' : 'pytest'}
+
+deploy:
+  platform: ${platform}
+  branch: main
+`;
+  }
+
+  // ─── ADR generation ───────────────────────────────────────────────────────────
+
+  async generateADR(
+    _workspaceId: string,
+    nodeLabel: string,
+    context: string
+  ): Promise<{ title: string; decision: string; consequences: string; alternatives: string[] }> {
     if (!groqAdapter.isEnabled) {
-      await MOCK_DELAY(800);
+      await MOCK_DELAY(500);
       return {
-        title: `Decision: Use ${nodeLabel} Pattern`,
-        decision: `We decided to implement ${nodeLabel} using the proposed approach based on: ${context}.`,
-        consequences: `Improved maintainability and clearer interfaces.`,
-        alternatives: [`Alternative A: Monolithic approach`, `Alternative B: Third-party service`],
+        title: `Decision: ${nodeLabel} Implementation Pattern`,
+        decision: `We decided to implement ${nodeLabel} using the proposed approach based on: ${context || 'team standards and scalability requirements'}.`,
+        consequences: `Positive: improved maintainability and clearer interfaces. Negative: additional initial setup time.`,
+        alternatives: [
+          `Alternative A: Monolithic approach — simpler but harder to scale`,
+          `Alternative B: Third-party managed service — faster but vendor lock-in`,
+        ],
       };
     }
 
     const prompt = `
-      Create an Architecture Decision Record (ADR) for: "${nodeLabel}"
-      Context provided: "${context}"
-      
-      Return JSON: { title, decision, consequences, alternatives: string[] }
+      Create an Architecture Decision Record (ADR) for the component: "${nodeLabel}"
+      Context: "${context}"
+
+      Return JSON: { "title": string, "decision": string, "consequences": string, "alternatives": string[] }
     `;
 
-    return groqAdapter.generateJson(prompt, undefined, undefined); // Signal not passed here for simplicity or add it if needed
+    return groqAdapter.generateJson(prompt, undefined, undefined);
   }
+
+  // ─── Architecture reconciliation ─────────────────────────────────────────────
 
   async reconcileArchitecture(
     originalArch: ArchitectureData,
     modifiedFiles: { path: string; content: string }[]
   ): Promise<{ architectureData: ArchitectureData; report: string }> {
     if (!groqAdapter.isEnabled) {
-      await MOCK_DELAY(1500);
+      await MOCK_DELAY(800);
       return {
         architectureData: originalArch,
-        report: 'Mock sync complete. No architectural changes detected in code.'
+        report: 'Mock sync complete. No architectural changes detected in the modified files.',
       };
     }
 
-    const diffs = modifiedFiles.map(f => {
-      // Try to find the original content in the architecture data
-      let originalContent = '';
-      for (const node of originalArch.nodes) {
-        const matchingFile = node.files?.find(originalFile => originalFile.path === f.path);
-        if (matchingFile) {
-          originalContent = matchingFile.content;
-          break;
-        }
+    const prompt = `
+      You are an Architectural Reconciliation Engine.
+
+      Current Architecture:
+      ${JSON.stringify(originalArch, null, 2)}
+
+      Modified files:
+      ${modifiedFiles.map(f => `--- ${f.path} ---\n${f.content}`).join('\n\n')}
+
+      Analyse if the code changes imply graph changes:
+      - New service dependency → new Edge
+      - New component/database → new Node
+      - Refactored layer → update Node metadata
+
+      Return JSON:
+      {
+        "architectureData": { ...updated graph... },
+        "report": "Human-readable summary of what changed"
       }
-      
-      const diff = getDiffSummary(originalContent, f.content);
-      return `--- FILE: ${f.path} ---\nDIFF SUMMARY:\n${diff}`;
-    });
 
-    const prompt = PromptBuilders.buildReconciliationPrompt(originalArch, diffs);
+      Keep existing node IDs stable.
+    `;
 
-    const result = await groqAdapter.generateJson<{ architectureData: ArchitectureData; report: string }>(
-      prompt,
-      undefined,
-      undefined
-    );
+    return groqAdapter.generateJson<{ architectureData: ArchitectureData; report: string }>(prompt, undefined, undefined);
+  }
 
-    return result;
+  // ─── Private helpers ──────────────────────────────────────────────────────────
+
+  private parseDesignData(designData: any): string | null {
+    if (!designData?.content || !Array.isArray(designData.content)) return null;
+
+    try {
+      const blocks = designData.content.map((block: any, idx: number) => {
+        const type  = block.type ?? 'Unknown';
+        const props = block.props ?? {};
+
+        let detail = '';
+        if (type === 'Heading')     detail = `: "${props.title}" (level ${props.level})`;
+        if (type === 'Text')        detail = `: "${String(props.text ?? '').substring(0, 50)}..."`;
+        if (type === 'Hero')        detail = `: "${props.title}" — ${String(props.description ?? '').substring(0, 30)}...`;
+        if (type === 'Button')      detail = `: "${props.label}" (${props.variant} variant)`;
+        if (type === 'Card')        detail = `: "${props.title}" — ${String(props.content ?? '').substring(0, 30)}...`;
+        if (type === 'FeatureGrid') detail = `: with ${props.features?.length ?? 0} features`;
+        if (type === 'Pricing')     detail = `: tiers [${props.tiers?.map((t: any) => t.plan).join(', ') ?? 'none'}]`;
+        if (type === 'Navbar')      detail = `: logo "${props.logo}" links [${props.links?.map((l: any) => l.label).join(', ') ?? 'none'}]`;
+        if (type === 'Contact')     detail = `: title "${props.title}"`;
+
+        return `${idx + 1}. [${type}]${detail}`;
+      });
+
+      return blocks.length > 0
+        ? `UI prototype blocks:\n${blocks.join('\n')}`
+        : null;
+    } catch (err) {
+      console.error('[GenerationService] Failed to parse design data:', err);
+      return null;
+    }
   }
 }
 

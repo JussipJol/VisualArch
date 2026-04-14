@@ -61,7 +61,10 @@ export function requireWorkspaceMember(minRole: WorkspaceRole = 'viewer') {
       return;
     }
 
-    req.workspace = workspace.toObject();
+    // toObject() strips virtuals (including the default `id` getter), so add it manually
+    const wsPlain = workspace.toObject() as any;
+    wsPlain.id = workspace._id.toString();
+    req.workspace = wsPlain;
     next();
   };
 }

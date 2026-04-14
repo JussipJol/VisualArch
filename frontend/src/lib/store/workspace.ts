@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 
+// ─── Domain types ─────────────────────────────────────────────────────────────
+
+export interface CodeFile {
+  name: string;
+  path: string;
+  content: string;
+  language: string;
+}
+
 export interface ArchNode {
   id: string;
   label: string;
@@ -8,8 +17,8 @@ export interface ArchNode {
   description: string;
   status: 'stable' | 'modified' | 'new';
   position: { x: number; y: number };
-  files?: { name: string; path: string; content: string; language: string }[];
-  testFiles?: { name: string; path: string; content: string; language: string }[];
+  files?: CodeFile[];
+  testFiles?: CodeFile[];
 }
 
 export interface ArchEdge {
@@ -34,6 +43,12 @@ export interface CriticIssue {
   suggestion: string;
 }
 
+export interface CriticFeedback {
+  score: number;
+  issues: CriticIssue[];
+  timestamp: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -45,13 +60,14 @@ export interface Workspace {
   visibility: 'private' | 'team' | 'public';
   collaborators: number;
   nodeCount: number;
+  designData?: any;
   updatedAt: string;
   createdAt: string;
 }
 
 export type GenerationStage = 'idle' | 'memory' | 'planning' | 'coding' | 'critique' | 'complete' | 'error';
 
-interface GenerationProgress {
+export interface GenerationProgress {
   stage: GenerationStage;
   currentNode?: string;
   totalNodes?: number;
@@ -63,6 +79,13 @@ interface GenerationProgress {
   criticIssues?: CriticIssue[];
 }
 
+export interface GenerationResult {
+  architectureData: ArchitectureData;
+  criticFeedback: CriticFeedback | null;
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
+
 interface WorkspaceState {
   workspaces: Workspace[];
   currentWorkspace: Workspace | null;
@@ -71,17 +94,21 @@ interface WorkspaceState {
   generationProgress: GenerationProgress;
   loading: boolean;
   error: string | null;
-  pendingCodeChanges: Record<string, string>; // path -> content
+  pendingCodeChanges: Record<string, string>;
 
   fetchWorkspaces: () => Promise<void>;
   fetchWorkspace: (id: string) => Promise<void>;
   createWorkspace: (name: string, description?: string) => Promise<Workspace>;
   deleteWorkspace: (id: string) => Promise<void>;
-  generateArchitecture: (workspaceId: string, prompt: string, onProgress?: (p: GenerationProgress) => void) => Promise<ArchitectureData | null>;
+  generateArchitecture: (
+    workspaceId: string,
+    prompt: string,
+    onProgress?: (p: GenerationProgress) => void
+  ) => Promise<GenerationResult | null>;
   setSelectedNode: (node: ArchNode | null) => void;
   updatePendingFile: (path: string, content: string) => void;
+  saveDesignCanvas: (workspaceId: string, designData: any) => Promise<void>;
   syncCodeToArchitecture: (workspaceId: string) => Promise<void>;
-  isNodeDirty: (nodeId: string) => boolean;
   clearError: () => void;
 }
 
@@ -129,63 +156,111 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   generateArchitecture: async (workspaceId, prompt, onProgress) => {
     set({ generating: true, generationProgress: { stage: 'memory', message: 'Retrieving project memory...' } });
 
-    try {
-      let result: ArchitectureData | null = null;
+    let architectureData: ArchitectureData | null = null;
+    let criticFeedback: CriticFeedback | null     = null;
 
+    try {
       for await (const { event, data } of api.stream(`/api/workspaces/${workspaceId}/generate/stream`, { prompt })) {
         switch (event) {
           case 'memory_retrieved':
-            set({ generationProgress: { stage: 'memory', message: `Found ${(data as { count: number }).count} relevant past decisions` } });
+            set({ generationProgress: { stage: 'memory', message: `Found ${(data as any).count} relevant past decisions` } });
             break;
+
           case 'planning_start':
             set({ generationProgress: { stage: 'planning', message: 'AI is architecting the system...' } });
             break;
+
           case 'planning_done':
-            set({ generationProgress: { stage: 'coding', message: `Plan ready: ${(data as { node_count: number }).node_count} components`, totalNodes: (data as { node_count: number }).node_count } });
+            set({ generationProgress: {
+              stage: 'coding',
+              message: `Plan ready — ${(data as any).node_count} components`,
+              totalNodes: (data as any).node_count,
+            }});
             break;
+
           case 'coding_node':
             set({ generationProgress: {
               stage: 'coding',
-              currentNode: (data as { label: string }).label,
-              completedNodes: (data as { index: number }).index,
-              totalNodes: (data as { total: number }).total,
-              message: `Generating ${(data as { label: string }).label}...`,
+              currentNode: (data as any).label,
+              completedNodes: (data as any).index,
+              totalNodes: (data as any).total,
+              message: `Generating ${(data as any).label}...`,
             }});
             break;
+
           case 'critique_start':
             set({ generationProgress: { stage: 'critique', message: 'Architecture Critic reviewing...' } });
             break;
+
           case 'critique_done':
-            set({ generationProgress: { stage: 'critique', score: (data as { score: number }).score, issues: (data as { issues_count: number }).issues_count, critiqued: true } });
+            set({ generationProgress: {
+              stage: 'critique',
+              score: (data as any).score,
+              issues: (data as any).issues_count,
+              critiqued: true,
+            }});
             break;
-          case 'complete':
-            result = (data as { architecture_data: ArchitectureData }).architecture_data;
-            set({ generationProgress: { stage: 'complete', score: undefined }, generating: false });
-            if (result) {
-              set(state => ({
-                currentWorkspace: state.currentWorkspace
-                  ? { ...state.currentWorkspace, architectureData: result! }
-                  : null,
-              }));
-            }
+
+          case 'complete': {
+            architectureData = (data as any).architecture_data as ArchitectureData;
+            criticFeedback   = (data as any).critic_feedback as CriticFeedback ?? null;
+
+            set(state => ({
+              generating: false,
+              generationProgress: { stage: 'complete' },
+              currentWorkspace: state.currentWorkspace
+                ? {
+                    ...state.currentWorkspace,
+                    architectureData: architectureData!,
+                    architectureScore: criticFeedback?.score ?? state.currentWorkspace.architectureScore,
+                  }
+                : null,
+            }));
             break;
+          }
+
+          case 'ai_fallback':
+            set({ generationProgress: { stage: 'planning', message: 'Using optimised mock engine...' } });
+            break;
+
           case 'error':
-            set({ generating: false, generationProgress: { stage: 'error', message: (data as { message: string }).message } });
+            set({
+              generating: false,
+              generationProgress: { stage: 'error', message: (data as any).message ?? 'Generation failed' },
+            });
             break;
         }
+
         onProgress?.(get().generationProgress);
       }
-      return result;
+
+      return architectureData ? { architectureData, criticFeedback } : null;
     } catch (err) {
-      set({ generating: false, generationProgress: { stage: 'error', message: err instanceof Error ? err.message : 'Generation failed' } });
+      set({
+        generating: false,
+        generationProgress: { stage: 'error', message: err instanceof Error ? err.message : 'Generation failed' },
+      });
       return null;
     }
   },
-  
+
+  saveDesignCanvas: async (workspaceId, designData) => {
+    try {
+      await api.patch(`/api/workspaces/${workspaceId}/design`, { designData });
+      set(state => ({
+        currentWorkspace: state.currentWorkspace
+          ? { ...state.currentWorkspace, designData }
+          : null,
+      }));
+    } catch (err) {
+      console.error('[WorkspaceStore] Failed to save design canvas:', err);
+    }
+  },
+
   setSelectedNode: (node) => set({ selectedNode: node }),
-  
+
   updatePendingFile: (path, content) => set(state => ({
-    pendingCodeChanges: { ...state.pendingCodeChanges, [path]: content }
+    pendingCodeChanges: { ...state.pendingCodeChanges, [path]: content },
   })),
 
   syncCodeToArchitecture: async (workspaceId) => {
@@ -195,32 +270,24 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ generating: true, generationProgress: { stage: 'planning', message: 'Reconciling code with architecture...' } });
 
     try {
-      // Send modified files + current architecture for AI analysis
       const res = await api.post<{ data: ArchitectureData }>(`/api/workspaces/${workspaceId}/sync`, {
         modifiedFiles: Object.entries(pendingCodeChanges).map(([path, content]) => ({ path, content })),
       });
 
       set(state => ({
-        currentWorkspace: state.currentWorkspace 
+        currentWorkspace: state.currentWorkspace
           ? { ...state.currentWorkspace, architectureData: res.data }
           : null,
-        pendingCodeChanges: {}, // Clear after sync
+        pendingCodeChanges: {},
         generating: false,
-        generationProgress: { stage: 'complete', message: 'Architecture synchronized!' }
+        generationProgress: { stage: 'complete', message: 'Architecture synchronized!' },
       }));
     } catch (err) {
-      set({ 
-        generating: false, 
-        generationProgress: { stage: 'error', message: err instanceof Error ? err.message : 'Sync failed' } 
+      set({
+        generating: false,
+        generationProgress: { stage: 'error', message: err instanceof Error ? err.message : 'Sync failed' },
       });
     }
-  },
-
-  isNodeDirty: (nodeId: string) => {
-    const { pendingCodeChanges, currentWorkspace } = get();
-    const node = currentWorkspace?.architectureData.nodes.find(n => n.id === nodeId);
-    if (!node || !node.files) return false;
-    return node.files.some(f => !!pendingCodeChanges[f.path]);
   },
 
   clearError: () => set({ error: null }),

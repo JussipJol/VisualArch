@@ -30,22 +30,32 @@ class ApiClient {
     const res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'include' });
 
     if (res.status === 401) {
-      // Try to refresh
-      try {
-        const refreshRes = await fetch(`${API_URL}/api/auth/refresh`, {
-          method: 'POST', credentials: 'include',
-        });
-        if (refreshRes.ok) {
-          const { accessToken } = await refreshRes.json();
-          this.setToken(accessToken);
-          headers['Authorization'] = `Bearer ${accessToken}`;
-          const retryRes = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'include' });
-          if (!retryRes.ok) throw new Error(await retryRes.text());
-          return retryRes.json();
+      // Never attempt auto-refresh for auth endpoints themselves — it creates cascading 401s
+      const isAuthEndpoint = path.startsWith('/api/auth/');
+      if (!isAuthEndpoint) {
+        try {
+          const refreshRes = await fetch(`${API_URL}/api/auth/refresh`, {
+            method: 'POST', credentials: 'include',
+          });
+          if (refreshRes.ok) {
+            const { accessToken } = await refreshRes.json();
+            this.setToken(accessToken);
+            headers['Authorization'] = `Bearer ${accessToken}`;
+            const retryRes = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'include' });
+            if (!retryRes.ok) {
+              const body = await retryRes.json().catch(() => ({ error: 'Request failed' }));
+              throw new Error(body.error ?? 'Request failed');
+            }
+            return retryRes.json();
+          }
+        } catch (refreshErr) {
+          // If the error is from the retry, re-throw it
+          if (refreshErr instanceof Error && refreshErr.message !== 'Request failed') throw refreshErr;
         }
-      } catch { /* silent */ }
+      }
       this.setToken(null);
-      throw new Error('Unauthorized');
+      const body = await res.json().catch(() => ({ error: 'Unauthorized' }));
+      throw new Error(body.error ?? 'Unauthorized');
     }
 
     if (!res.ok) {
@@ -76,7 +86,10 @@ class ApiClient {
       credentials: 'include',
     });
 
-    if (!res.ok || !res.body) throw new Error('Stream failed');
+    if (!res.ok || !res.body) {
+      const body = await res.json().catch(() => ({ error: 'Stream failed' }));
+      throw new Error(body.error ?? 'Stream failed');
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

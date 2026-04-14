@@ -31,7 +31,7 @@ export const PLAN_CREDITS: Record<PlanType, number> = {
 };
 
 export class CreditsService {
-  async deductCredits(userId: string, amount: number, meta: Record<string, unknown>, status: 'pending' | 'completed' = 'completed'): Promise<any> {
+  async deductCredits(userId: string, amount: number, meta: Record<string, unknown>): Promise<boolean> {
     // Atomic update: only deduct if current balance >= amount
     const user = await UserModel.findOneAndUpdate(
       { _id: userId, creditsBalance: { $gte: amount } },
@@ -39,58 +39,17 @@ export class CreditsService {
       { new: true }
     );
 
-    if (!user) return null;
+    if (!user) return false;
 
     const tx = new TransactionModel({
       userId,
       type: 'spend',
       amount: -amount,
       balanceAfter: user.creditsBalance,
-      status,
       meta,
     });
     
     await tx.save();
-    return tx;
-  }
-
-  async completeTransaction(txId: string): Promise<boolean> {
-    const tx = await TransactionModel.findByIdAndUpdate(txId, { $set: { status: 'completed' } }, { new: true });
-    return !!tx;
-  }
-
-  async refundTransaction(txId: string, reason: string): Promise<boolean> {
-    const originalTx = await TransactionModel.findById(txId);
-    if (!originalTx || originalTx.status === 'refunded' || originalTx.status === 'failed') return false;
-
-    // Actual refund amount (positive)
-    const refundAmount = Math.abs(originalTx.amount);
-    
-    const user = await UserModel.findByIdAndUpdate(
-      originalTx.userId,
-      { $inc: { creditsBalance: refundAmount } },
-      { new: true }
-    );
-
-    if (!user) return false;
-
-    // Mark original as failed/refunded
-    originalTx.status = 'failed';
-    originalTx.meta = { ...originalTx.meta, refundReason: reason };
-    await originalTx.save();
-
-    // Create a new refund transaction record
-    const refundTx = new TransactionModel({
-      userId: originalTx.userId,
-      type: 'earn',
-      amount: refundAmount,
-      balanceAfter: user.creditsBalance,
-      status: 'completed',
-      referenceId: originalTx.id,
-      meta: { reason: `Refund for ${originalTx.id}: ${reason}` },
-    });
-    
-    await refundTx.save();
     return true;
   }
 

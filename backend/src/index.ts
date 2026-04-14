@@ -12,6 +12,7 @@ import marketplaceRouter from './routes/marketplace';
 import { creditsRouter, notifRouter } from './routes/credits';
 import { initializeWebSocket } from './websocket/workspace.gateway';
 import { connectDatabase } from './models/db';
+import { seedDemoUser } from './models/seed';
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -78,6 +79,8 @@ app.use((req, _res, next) => {
 app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/users', authLimiter, authRouter);
 app.use('/api/workspaces', workspacesRouter);
+// Apply generation rate limiting per-path (generate endpoints within workspacesRouter)
+app.use('/api/workspaces/:id/generate', generateLimiter);
 app.use('/api/templates', marketplaceRouter);
 app.use('/api/credits', creditsRouter);
 app.use('/api/notifications', notifRouter);
@@ -112,7 +115,8 @@ initializeWebSocket(httpServer, FRONTEND_URL);
 
 // ── Start ─────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
-  connectDatabase().then(() => {
+  connectDatabase().then(async () => {
+    await seedDemoUser();
     httpServer.listen(PORT, () => {
       console.log(`\n🚀 VisualArch API v3.0 running on http://localhost:${PORT}`);
       console.log(`📡 WebSocket ready at ws://localhost:${PORT}/workspace`);
