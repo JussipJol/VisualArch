@@ -3,15 +3,15 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { useWorkspaceStore } from '@/lib/store/workspace';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 
-// Dynamically import PuckEditor with SSR disabled (Puck uses browser APIs)
-const PuckEditor = dynamic(() => import('./PuckEditor'), {
+// Dynamically import CraftDesigner with SSR disabled (uses local storage/browser APIs)
+const CraftDesigner = dynamic(() => import('./designer/CraftDesigner').then(mod => mod.CraftDesigner), {
   ssr: false,
   loading: () => (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-bg text-text-secondary">
       <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      <p className="text-sm font-medium animate-pulse">Initializing Visual Builder...</p>
+      <p className="text-sm font-medium animate-pulse uppercase tracking-widest">Initialising Craft Studio...</p>
     </div>
   ),
 });
@@ -39,11 +39,11 @@ class DesignerErrorBoundary extends React.Component<
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-bg text-center space-y-4">
           <div className="p-4 rounded-full bg-error/10 text-error">
-            <Loader2 className="w-8 h-8 rotate-45" />
+            <AlertCircle className="w-8 h-8" />
           </div>
           <h2 className="text-xl font-bold text-text-primary">Designer Encountered an Error</h2>
           <p className="text-sm text-text-secondary max-w-md">
-            The visual editor crashed due to a rendering conflict. This is often caused by invalid design state or a React key violation.
+            The Craft.js engine crashed due to a state conflict or a React rendering error.
           </p>
           <div className="flex gap-3">
             <button
@@ -53,13 +53,13 @@ class DesignerErrorBoundary extends React.Component<
               }}
               className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-bold shadow-glow-accent"
             >
-              Reset Designer
+              Reset Canvas
             </button>
             <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 bg-white/5 text-text-primary rounded-lg text-sm font-medium hover:bg-white/10"
             >
-              Reload Page
+              Refresh Workspace
             </button>
           </div>
           {this.state.error && (
@@ -76,7 +76,7 @@ class DesignerErrorBoundary extends React.Component<
 }
 
 export function DesignMode() {
-  const { currentWorkspace, saveDesignCanvas } = useWorkspaceStore();
+  const { currentWorkspace, resetDesignState } = useWorkspaceStore();
 
   if (!currentWorkspace) {
     return (
@@ -87,19 +87,23 @@ export function DesignMode() {
   }
 
   const handleReset = async () => {
-    // Force reset to architecture-derived design if things break
-    await saveDesignCanvas(currentWorkspace.id, null);
-    window.location.reload();
+    try {
+      await resetDesignState(currentWorkspace.id);
+      window.location.reload();
+    } catch (err) {
+      console.error('Reset failed:', err);
+      // Fallback: forcefully clear and reload if API fails
+      window.location.reload();
+    }
   };
 
   return (
-    <div className="h-full flex flex-col bg-bg overflow-hidden transition-opacity duration-300">
+    <div className="h-full flex flex-col bg-bg overflow-hidden">
       <DesignerErrorBoundary onReset={handleReset}>
-        <PuckEditor
+        <CraftDesigner
           workspaceId={currentWorkspace.id}
-          initialData={currentWorkspace.designData}
+          initialState={currentWorkspace.designState}
           architectureData={currentWorkspace.architectureData}
-          workspaceName={currentWorkspace.name}
         />
       </DesignerErrorBoundary>
     </div>

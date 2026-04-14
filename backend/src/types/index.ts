@@ -86,7 +86,7 @@ export interface Workspace {
   architectureScore: number;
   lastCriticRun?: Date;
   archspecYaml?: string;
-  designData?: any;
+  designState?: any;
   createdAt: Date;
   updatedAt: Date;
 }

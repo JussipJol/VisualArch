@@ -12,6 +12,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@craftjs/core": "^0.2.12",
+    "@craftjs/utils": "^0.2.5",
+    "@monaco-editor/react": "^4.6.0",
     "clsx": "^2.1.1",
     "framer-motion": "^12.6.5",
     "lucide-react": "^0.483.0",
@@ -22,9 +25,7 @@
     "recharts": "^2.13.0",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.4",
-    "zustand": "^5.0.1",
-    "@monaco-editor/react": "^4.6.0",
-    "@measured/puck": "^0.17.0"
+    "zustand": "^5.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

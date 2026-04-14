@@ -198,6 +198,32 @@ export async function generateMockArchitecture(
 
   const architectureData: ArchitectureData = { nodes, edges, techStack, layoutDirection: 'TB' };
   const creditsUsed = nodes.length * 2; // lower cost in mock mode
+  
+  // A simple Craft.js suggested layout for mock mode
+  const designState = {
+    ROOT: {
+      type: { resolvedName: 'Container' },
+      isCanvas: true,
+      props: { background: '#0D0E1A', padding: '40px' },
+      nodes: ['hero-node'],
+      displayName: 'Container',
+      custom: {},
+      parent: null,
+      hidden: false,
+      linkedNodes: {}
+    },
+    'hero-node': {
+      type: { resolvedName: 'Hero' },
+      isCanvas: false,
+      props: { title: 'Mock Architect Suggestion', subtitle: 'Start by editing this visual layout.' },
+      parent: 'ROOT',
+      displayName: 'Hero',
+      custom: {},
+      hidden: false,
+      nodes: [],
+      linkedNodes: {}
+    }
+  };
 
-  return { architectureData, criticFeedback, creditsUsed, modelUsed: 'mock-engine' };
+  return { architectureData, criticFeedback, designState, creditsUsed, modelUsed: 'mock-engine' };
 }

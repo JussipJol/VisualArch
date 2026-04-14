@@ -60,7 +60,7 @@ export interface Workspace {
   visibility: 'private' | 'team' | 'public';
   collaborators: number;
   nodeCount: number;
-  designData?: any;
+  designState?: any;
   updatedAt: string;
   createdAt: string;
 }
@@ -107,7 +107,9 @@ interface WorkspaceState {
   ) => Promise<GenerationResult | null>;
   setSelectedNode: (node: ArchNode | null) => void;
   updatePendingFile: (path: string, content: string) => void;
-  saveDesignCanvas: (workspaceId: string, designData: any) => Promise<void>;
+  saveDesignState: (workspaceId: string, designState: any) => Promise<void>;
+  resetDesignState: (workspaceId: string) => Promise<void>;
+  finalizeDesign: (workspaceId: string, designState: any) => Promise<void>;
   syncCodeToArchitecture: (workspaceId: string) => Promise<void>;
   clearError: () => void;
 }
@@ -244,16 +246,55 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
-  saveDesignCanvas: async (workspaceId, designData) => {
+  saveDesignState: async (workspaceId, designState) => {
     try {
-      await api.patch(`/api/workspaces/${workspaceId}/design`, { designData });
+      await api.patch(`/api/workspaces/${workspaceId}/design`, { designState });
       set(state => ({
         currentWorkspace: state.currentWorkspace
-          ? { ...state.currentWorkspace, designData }
+          ? { ...state.currentWorkspace, designState }
           : null,
       }));
     } catch (err) {
-      console.error('[WorkspaceStore] Failed to save design canvas:', err);
+      console.error('[WorkspaceStore] Failed to save design state:', err);
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        // Handle specifically if desired, but api.ts already clears token
+      }
+    }
+  },
+
+  resetDesignState: async (workspaceId) => {
+    set({ loading: true });
+    try {
+      await api.patch(`/api/workspaces/${workspaceId}/design`, { designState: null });
+      set(state => ({
+        currentWorkspace: state.currentWorkspace
+          ? { ...state.currentWorkspace, designState: null }
+          : null,
+        loading: false
+      }));
+    } catch (err) {
+      console.error('[WorkspaceStore] Reset failed:', err);
+      set({ loading: false });
+      throw err;
+    }
+  },
+
+  finalizeDesign: async (workspaceId, designState) => {
+    set({ generating: true, generationProgress: { stage: 'planning', message: 'Analyzing modifications...' } });
+    try {
+      const res = await api.post<{ data: ArchitectureData }>(`/api/workspaces/${workspaceId}/design/submit`, { designState });
+      set(state => ({
+        currentWorkspace: state.currentWorkspace
+          ? { ...state.currentWorkspace, architectureData: res.data, designState }
+          : null,
+        generating: false,
+        generationProgress: { stage: 'complete', message: 'Full system refactored successfully!' }
+      }));
+    } catch (err) {
+      set({ 
+        generating: false, 
+        generationProgress: { stage: 'error', message: err instanceof Error ? err.message : 'Finalization failed' } 
+      });
     }
   },
 

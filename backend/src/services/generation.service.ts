@@ -6,7 +6,7 @@ import { generateMockArchitecture, MOCK_DELAY } from './mock-engine';
 interface GenerationOptions {
   prompt: string;
   previousArchitecture?: ArchitectureData;
-  designData?: any;
+  designState?: any;
   useStream?: boolean;
   onEvent?: (event: string, data: Record<string, unknown>) => void;
   signal?: AbortSignal;
@@ -15,6 +15,7 @@ interface GenerationOptions {
 interface GenerationResult {
   architectureData: ArchitectureData;
   criticFeedback: CriticFeedback;
+  designState?: any;
   totalTimeMs: number;
   creditsUsed: number;
   modelUsed: string;
@@ -49,7 +50,7 @@ export class GenerationService {
   // ─── AI pipeline (4 stages) ──────────────────────────────────────────────────
 
   private async generateWithAI(options: GenerationOptions, startTime: number): Promise<GenerationResult> {
-    const { prompt, previousArchitecture, designData, onEvent, signal } = options;
+    const { prompt, previousArchitecture, designState, onEvent, signal } = options;
 
     // Stage 0 – memory
     onEvent?.('memory_retrieved', { count: 0, relevant_decisions: [] });
@@ -66,12 +67,32 @@ export class GenerationService {
       {
         "techStack": string[],
         "nodes": [{ "label": string, "layer": string, "description": string, "position": { "x": number, "y": number } }],
-        "edges": [{ "sourceLabel": string, "targetLabel": string, "label": string }]
+        "edges": [{ "sourceLabel": string, "targetLabel": string, "label": string }],
+        "suggestedDesign": {
+          "ROOT": {
+            "type": { "resolvedName": "Container" },
+            "isCanvas": true,
+            "props": { "padding": "40px", "background": "#0D0E1A" },
+            "displayName": "Container",
+            "custom": {}, "parent": null, "hidden": false, "nodes": ["node-1"], "linkedNodes": {}
+          },
+          "node-1": {
+             "type": { "resolvedName": "Hero" | "Section" | "Text" | "Button" | "Container" },
+             "isCanvas": boolean,
+             "props": object,
+             "displayName": string,
+             "parent": "ROOT",
+             "nodes": string[],
+             "custom": {}, "hidden": false, "linkedNodes": {}
+          }
+        }
       }
+
+      MUST: only use "Container", "Hero", "Section", "Text", "Button" in resolvedName.
     `;
 
-    if (designData) {
-      const designContext = this.parseDesignData(designData);
+    if (designState) {
+      const designContext = this.parseDesignState(designState);
       if (designContext) {
         planPrompt = `
           Visual Design Context from User Sketch:
@@ -88,6 +109,7 @@ export class GenerationService {
       techStack: string[];
       nodes: any[];
       edges: any[];
+      suggestedDesign?: any;
     }>(planPrompt, undefined, signal);
 
     const nodes: ArchitectureNode[] = plan.nodes.map((n: any, i: number) => ({
@@ -176,7 +198,14 @@ export class GenerationService {
     const creditsUsed = nodes.length * 10;
     const totalTimeMs = Date.now() - startTime;
 
-    return { architectureData, criticFeedback, totalTimeMs, creditsUsed, modelUsed: 'llama-3.3-70b-versatile' };
+    return { 
+      architectureData, 
+      criticFeedback, 
+      designState: plan.suggestedDesign,
+      totalTimeMs, 
+      creditsUsed, 
+      modelUsed: 'llama-3.3-70b-versatile' 
+    };
   }
 
   // ─── CI/CD config generation ─────────────────────────────────────────────────
@@ -286,6 +315,50 @@ deploy:
     return groqAdapter.generateJson(prompt, undefined, undefined);
   }
 
+  // ─── Design Finalization (Ultra Iteration) ──────────────────────────────────
+
+  async finalizeDesign(
+    workspaceId: string,
+    currentArch: ArchitectureData,
+    designState: any
+  ): Promise<{ architectureData: ArchitectureData; summary: string }> {
+    const parsedDesign = typeof designState === 'string' ? JSON.parse(designState) : designState;
+    const designContext = this.parseDesignState(parsedDesign);
+
+    const prompt = `
+      You are the VisualArch L99 ULTRA Coder.
+      The user has visually refined their frontend design using a drag-and-drop tool.
+      
+      Visual Design State (Logical Structure):
+      ${designContext}
+
+      Current System Architecture:
+      ${JSON.stringify(currentArch, null, 2)}
+
+      TASKS:
+      1. Analyze the delta between the original architecture and the new visual layout.
+      2. Refactor existing code files to match the UI sections, props, and styling defined in the design state.
+      3. Ensure "Frontend" components correctly call "Backend" APIs.
+      4. Upgrade ALL generated code to "Production Grade" (Tailwind, Lucide, State management).
+
+      Return JSON:
+      {
+        "architectureData": { ...updated nodes with HIGH FIDELITY code in files[]... },
+        "summary": "AI summary of design-to-code transformations"
+      }
+      
+      KEEP NODE IDs STABLE. Return FULL code for affected files.
+    `;
+
+    const result = await groqAdapter.generateJson<{ architectureData: ArchitectureData; summary: string }>(
+      prompt,
+      undefined,
+      undefined
+    );
+
+    return result;
+  }
+
   // ─── Architecture reconciliation ─────────────────────────────────────────────
 
   async reconcileArchitecture(
@@ -328,33 +401,37 @@ deploy:
 
   // ─── Private helpers ──────────────────────────────────────────────────────────
 
-  private parseDesignData(designData: any): string | null {
-    if (!designData?.content || !Array.isArray(designData.content)) return null;
+  private parseDesignState(designState: any): string | null {
+    const state = typeof designState === 'string' ? JSON.parse(designState) : designState;
+    if (!state || typeof state !== 'object') return null;
 
     try {
-      const blocks = designData.content.map((block: any, idx: number) => {
-        const type  = block.type ?? 'Unknown';
-        const props = block.props ?? {};
-
-        let detail = '';
-        if (type === 'Heading')     detail = `: "${props.title}" (level ${props.level})`;
-        if (type === 'Text')        detail = `: "${String(props.text ?? '').substring(0, 50)}..."`;
-        if (type === 'Hero')        detail = `: "${props.title}" — ${String(props.description ?? '').substring(0, 30)}...`;
-        if (type === 'Button')      detail = `: "${props.label}" (${props.variant} variant)`;
-        if (type === 'Card')        detail = `: "${props.title}" — ${String(props.content ?? '').substring(0, 30)}...`;
-        if (type === 'FeatureGrid') detail = `: with ${props.features?.length ?? 0} features`;
-        if (type === 'Pricing')     detail = `: tiers [${props.tiers?.map((t: any) => t.plan).join(', ') ?? 'none'}]`;
-        if (type === 'Navbar')      detail = `: logo "${props.logo}" links [${props.links?.map((l: any) => l.label).join(', ') ?? 'none'}]`;
-        if (type === 'Contact')     detail = `: title "${props.title}"`;
-
-        return `${idx + 1}. [${type}]${detail}`;
-      });
+      // Craft.js state is usually a map of nodes
+      const nodes = Object.values(state) as any[];
+      const blocks = nodes
+        .filter(node => node.type && node.type.resolvedName !== 'Container')
+        .map((node, idx) => {
+          const name = node.type.resolvedName;
+          const props = node.props || {};
+          
+          let detail = '';
+          if (name === 'Hero')    detail = `: "${props.title}" - ${props.subtitle}`;
+          if (name === 'Text')    detail = `: "${String(props.text).substring(0, 40)}..."`;
+          if (name === 'Button')  detail = `: label "${props.text}"`;
+          if (name === 'Section') detail = `: title "${props.title}"`;
+          
+          const styles = [];
+          if (props.background) styles.push(`bg: ${props.background}`);
+          if (props.padding)    styles.push(`pad: ${props.padding}`);
+          
+          return `${idx + 1}. [${name}]${detail}${styles.length ? ` {${styles.join(', ')}}` : ''}`;
+        });
 
       return blocks.length > 0
-        ? `UI prototype blocks:\n${blocks.join('\n')}`
-        : null;
+        ? `Craft.js UI Layout:\n${blocks.join('\n')}`
+        : 'Empty design canvas';
     } catch (err) {
-      console.error('[GenerationService] Failed to parse design data:', err);
+      console.error('[GenerationService] Failed to parse Craft state:', err);
       return null;
     }
   }

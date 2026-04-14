@@ -34,7 +34,7 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
   try {
     const result = await generationService.generate({
       prompt,
-      designData: workspace.designData,
+      designState: workspace.designState,
       previousArchitecture: workspace.architectureData.nodes.length > 0
         ? workspace.architectureData as ArchitectureData
         : undefined,
@@ -44,6 +44,7 @@ router.post('/:id/generate', authenticateJWT, requireWorkspaceMember('editor'), 
       $set: {
         prompt,
         architectureData: result.architectureData,
+        designState: result.designState,
         techStack: result.architectureData.techStack,
         architectureScore: result.criticFeedback.score,
         lastCriticRun: new Date(),
@@ -123,7 +124,7 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
   try {
     const result = await generationService.generate({
       prompt,
-      designData: workspace.designData,
+      designState: workspace.designState,
       previousArchitecture: workspace.architectureData.nodes.length > 0
         ? workspace.architectureData as ArchitectureData
         : undefined,
@@ -137,6 +138,7 @@ router.post('/:id/generate/stream', authenticateJWT, requireWorkspaceMember('edi
       $set: {
         prompt,
         architectureData: result.architectureData,
+        designState: result.designState, // Initial suggestion
         techStack: result.architectureData.techStack,
         architectureScore: result.criticFeedback.score,
         lastCriticRun: new Date(),
@@ -248,6 +250,53 @@ router.post('/:id/sync', authenticateJWT, requireWorkspaceMember('editor'), asyn
     console.error('[Sync] Reconciliation failed:', err);
     await creditsService.addCredits(userId, CREDITS_COSTS.SYNC_RECONCILE, 'earn', { reason: 'sync_failed_refund' });
     return res.status(500).json({ error: 'Failed to synchronize architecture. Credits refunded.' });
+  }
+});
+
+// ─── POST /api/workspaces/:id/design/submit ──────────────────────────────────
+router.post('/:id/design/submit', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
+  const userId = req.user!.userId;
+  const workspaceId = req.params.id;
+  const { designState } = req.body;
+
+  if (!designState) {
+    return res.status(400).json({ error: 'Design state is required' });
+  }
+
+  const creditsCost = CREDITS_COSTS.SYNC_RECONCILE * 2; // Iteration is expensive
+  const deducted = await creditsService.deductCredits(userId, creditsCost, {
+    action: 'design_submit',
+    workspaceId,
+  });
+
+  if (!deducted) {
+    return res.status(402).json({ error: 'Insufficient credits', required: creditsCost });
+  }
+
+  try {
+    const workspace = await WorkspaceModel.findById(workspaceId);
+    if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+
+    const result = await generationService.finalizeDesign(
+      workspaceId,
+      workspace.architectureData as unknown as ArchitectureData,
+      designState
+    );
+
+    // Save the new architecture and the state
+    await WorkspaceModel.findByIdAndUpdate(workspaceId, {
+      $set: { 
+        architectureData: result.architectureData, 
+        designState,
+        updatedAt: new Date() 
+      },
+    });
+
+    return res.json({ data: result.architectureData });
+  } catch (err) {
+    console.error('[DesignSubmit] Failed:', err);
+    await creditsService.addCredits(userId, creditsCost, 'earn', { reason: 'design_submit_failed_refund' });
+    return res.status(500).json({ error: 'Failed to finalize design and refactor code.' });
   }
 });
 

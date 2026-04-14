@@ -97,11 +97,11 @@ router.get('/:id', authenticateJWT, requireWorkspaceMember('viewer'), (req: Requ
 
 // ─── PATCH /api/workspaces/:id/design ────────────────────────────────────────
 router.patch('/:id/design', authenticateJWT, requireWorkspaceMember('editor'), async (req: Request, res: Response) => {
-  const { designData } = req.body;
+  const { designState } = req.body;
 
   const workspace = await WorkspaceModel.findByIdAndUpdate(
     req.params.id,
-    { $set: { designData, updatedAt: new Date() } },
+    { $set: { designState, updatedAt: new Date() } },
     { new: true }
   );
 
