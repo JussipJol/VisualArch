@@ -25,15 +25,49 @@ export interface IProject extends Document {
   updatedAt: Date;
 }
 
+export { AIModule } from '../services/ai/ai.types';
+
 export interface ICanvasNode {
   id: string;
-  type: 'service' | 'database' | 'queue' | 'client' | 'api';
+  type: 'service' | 'database' | 'queue' | 'client' | 'api'
+      | 'cdn' | 'gateway' | 'auth' | 'worker' | 'cache'
+      | 'storage' | 'monitoring' | 'external';
   label: string;
   tech: string;
   description: string;
+  responsibilities?: string[];
+  endpoints?: string[];
+  databaseMetadata?: {
+    engine: 'mongodb' | 'postgresql' | 'redis';
+    collections?: Array<{
+      name: string;
+      fields: Array<{ name: string; type: string; required: boolean; relation?: string }>;
+    }>;
+  };
   status: 'stable' | 'new' | 'modified';
   x: number;
   y: number;
+}
+
+// ... rest of the file ...
+export interface DesignSystem {
+  screens: Array<{ 
+    id: string;
+    name: string; 
+    description: string; 
+    path: string;
+    elements: Array<any>;
+  }>;
+  theme: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    surface: string;
+    background: string;
+    text: string;
+    borderRadius: number;
+    fontFamily: string;
+  };
 }
 
 export interface ICanvasEdge {
@@ -42,6 +76,7 @@ export interface ICanvasEdge {
   target: string;
   type: 'sync' | 'async' | 'bidirectional';
   label: string;
+  dataFlow?: string;
 }
 
 export interface ICanvasIteration extends Document {

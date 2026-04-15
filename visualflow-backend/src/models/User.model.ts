@@ -8,6 +8,6 @@ const UserSchema = new Schema<IUser>({
   plan: { type: String, enum: ['free', 'pro'], default: 'free' },
 }, { timestamps: true });
 
-UserSchema.index({ email: 1 });
+// Email is already unique and indexed via the field definition
 
 export const User = mongoose.model<IUser>('User', UserSchema);

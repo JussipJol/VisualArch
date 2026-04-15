@@ -82,26 +82,16 @@ export const PreviewStage = ({ projectId }: { projectId: string }) => {
       },
       onChunk: () => {},
       onStatus: msg => setStatus(msg),
-      onDone: async (data) => {
-        setStatus('Loading preview...');
-        // Reload files after generation
-        const { data: codeData } = await api.get(`/projects/${projectId}/code`);
-        if (codeData.files) {
-          setCode(codeData.files, codeData.codeId?.toString() || '');
-          // Load more files for a better preview experience
-          const fileContents: Record<string, string> = {};
-          for (const f of codeData.files.slice(0, 30)) {
-            try {
-              const { data: fd } = await api.get(`/projects/${projectId}/code/file?path=${encodeURIComponent(f.path)}`);
-              if (fd.file?.content) {
-                const p = f.path.startsWith('/') ? f.path : `/${f.path}`;
-                fileContents[p] = fd.file.content;
-              }
-            } catch { /* skip */ }
-          }
-          if (Object.keys(fileContents).length > 0) {
-            setSandpackFiles(prev => ({ ...DEFAULT_FILES, ...fileContents }));
-          }
+      onDone: async (data: any) => {
+        setStatus('Syncing workspace...');
+        if (data.files) {
+          setCode(data.files, data.codeId || '');
+          // Trigger file loader for background preview enrichment
+          loadAllFiles(data.codeId);
+        } else {
+          // Fallback to manual fetch if message was partial
+          const { data: codeData } = await api.get(`/projects/${projectId}/code`);
+          if (codeData.files) setCode(codeData.files, codeData.codeId?.toString() || '');
         }
         setStatus('');
         setGenerating(false);

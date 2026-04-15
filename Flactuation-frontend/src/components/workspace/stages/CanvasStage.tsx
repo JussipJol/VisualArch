@@ -24,10 +24,22 @@ const typeIcon: Record<string, string> = {
 };
 
 const SUGGESTIONS = [
-  { label: 'SaaS Platform', prompt: 'Modern SaaS with Next.js, Go backend, PostgreSQL, Redis caching, and Stripe integration' },
-  { label: 'E-commerce', prompt: 'E-commerce microservices: Auth, Catalog, Cart, Order, Payment, and Search (Elastic)' },
-  { label: 'Real-time Chat', prompt: 'Real-time chat with WebSockets (Socket.io), MongoDB, and Redis PubSub' },
-  { label: 'Data Pipeline', prompt: 'ETL pipeline: Web Scraper -> Kafka -> Spark Worker -> ClickHouse' },
+  { 
+    label: 'Enterprise SaaS', 
+    prompt: 'Architect a high-scale Enterprise SaaS Platform. Requirements: Multi-tenant database architecture (PostgreSQL row-level security), Next.js 15 frontend with advanced analytics dashboards and SSR optimization. Backend: High-concurrency Go microservices. Auth: Enterprise-grade JWT with RBAC and SSO (SAML/Okta) support. Billing: Complex Stripe integration for per-seat and usage-based billing. Infrastructure: Kubernetes-ready with Prometheus/Grafana monitoring and full CI/CD pipeline.' 
+  },
+  { 
+    label: 'Full E-commerce', 
+    prompt: 'Design a comprehensive Full-scale E-commerce Ecosystem. Core Modules: 1. Advanced Auth (JWT/OAuth2/MFA). 2. Dynamic Product Catalog with variant management. 3. Real-time Shopping Cart (Redis). 4. Secure Order Management system with lifecycle tracking. 5. Global Payments: Stripe integration with Checkout/Webhooks. 6. Notifications: SendGrid for transactional emails. 7. Search: Elasticsearch for fuzzy/facet search. 8. Performance: Integrated CDN strategy for global media delivery. Stack: React, Node.js, MongoDB, Redis.' 
+  },
+  { 
+    label: 'AI Chat System', 
+    prompt: 'Build a next-gen Scalable AI Chat Platform. Infrastructure: Node.js WebSocket cluster (Socket.io) with sticky sessions. Features: Global presence, real-time typing indicators, and message read receipts. Data: MongoDB cluster for infinite message history and multi-device sync, Redis PubSub for cross-server routing. AI: Direct streaming from Gemini 1.5 Pro and Llama 3.3 with project-aware memory context. Security: End-to-end encryption (E2EE), media moderation, and rate limiting.' 
+  },
+  { 
+    label: 'Analytics Pipeline', 
+    prompt: 'Implement a high-throughput Regional Data Intelligence Pipeline. Ingestion: Distributed scrapers and IoT feeders streaming into Apache Kafka with schema registry. Processing: Spark Streaming for real-time data cleaning, transformation, and sentiment analysis. Analytics: ClickHouse OLAP storage for sub-second analytical queries. UI: Custom D3.js real-time analytics dashboard with auto-updating metrics and trend forecasting. Full observability: ELK stack (Elasticsearch, Logstash, Kibana) and OpenTelemetry.' 
+  }
 ];
 
 interface ViewState { x: number; y: number; scale: number }
@@ -319,9 +331,26 @@ export const CanvasStage = ({ projectId }: { projectId: string }) => {
               <button 
                 key={i} 
                 onClick={() => { setPrompt(s.prompt); }}
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontSize: '0.7rem', transition: 'all 0.2s' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,255,204,0.3)'; (e.currentTarget as HTMLButtonElement).style.color = '#00ffcc'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.4)'; }}
+                style={{ 
+                  background: 'rgba(255, 255, 255, 0.02)', 
+                  border: '1px solid rgba(255, 255, 255, 0.07)', 
+                  color: 'rgba(255, 255, 255, 0.35)', 
+                  padding: '6px 14px', 
+                  borderRadius: '3px', 
+                  cursor: 'pointer', 
+                  fontSize: '0.68rem', 
+                  transition: '0.2s' 
+                }}
+                onMouseEnter={e => { 
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,255,204,0.3)'; 
+                  (e.currentTarget as HTMLButtonElement).style.color = '#00ffcc'; 
+                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,255,204,0.05)';
+                }}
+                onMouseLeave={e => { 
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255, 255, 255, 0.07)'; 
+                  (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255, 255, 255, 0.35)'; 
+                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.02)';
+                }}
               >
                 + {s.label}
               </button>

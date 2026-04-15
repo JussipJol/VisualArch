@@ -4,10 +4,17 @@ export type Stage = 'canvas' | 'design' | 'preview' | 'ide';
 
 export interface CanvasNode {
   id: string;
-  type: 'service' | 'database' | 'queue' | 'client' | 'api';
+  type: 'service' | 'database' | 'queue' | 'client' | 'api'
+      | 'cdn' | 'gateway' | 'auth' | 'worker' | 'cache'
+      | 'storage' | 'monitoring' | 'external';
   label: string;
   tech: string;
   description: string;
+  responsibilities?: string[];
+  endpoints?: string[];
+  dependencies?: string[];
+  scale?: 'horizontal' | 'vertical' | 'fixed';
+  replicas?: number;
   status: 'stable' | 'new' | 'modified';
   x: number;
   y: number;
@@ -19,6 +26,7 @@ export interface CanvasEdge {
   target: string;
   type: 'sync' | 'async' | 'bidirectional';
   label: string;
+  dataFlow?: string;
 }
 
 export interface Project {

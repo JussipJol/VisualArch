@@ -1,7 +1,9 @@
-import { groqComplete } from './groq.service';
+import { aiOrchestrator } from './ai/orchestrator.service';
+import { AIModule } from './ai/ai.types';
 import { PLANNER_SYSTEM_PROMPT, FRONTEND_FILE_PROMPT, BACKEND_FILE_PROMPT, README_PROMPT } from '../prompts/code.prompts';
 import { buildContext } from './memory.service';
 import { ICanvasNode } from '../types';
+import { Project } from '../models/Project.model';
 
 export interface GeneratedFile {
   path: string;
@@ -24,79 +26,140 @@ export const generateProjectCode = async (
   projectId: string,
   nodes: ICanvasNode[],
   prompt: string,
-  onProgress: (stage: string, file?: string) => void
+  onProgress: (stage: string, file?: string, chunk?: string) => void
 ): Promise<GeneratedFile[]> => {
   const context = await buildContext(projectId);
-  const entities = nodes.filter(n => n.type === 'database' || n.type === 'service').map(n => n.label);
-  const projectContext = `${context}\nProject description: ${prompt}\nMain entities: ${entities.join(', ')}`;
+  const project = await Project.findById(projectId);
+  
+  // Enrich context with detailed blueprint metadata and design tokens
+  const blueprintDetails = nodes.map(n => ({
+    label: n.label,
+    tech: n.tech,
+    description: n.description,
+    dbSchema: n.databaseMetadata
+  }));
+
+  const projectContext = `
+    MASTER ARCHITECTURE BLUEPRINT:
+    ${JSON.stringify(blueprintDetails, null, 2)}
+    
+    UI/UX DESIGN SYSTEM (Figma Tokens):
+    ${JSON.stringify(project?.designSystem || 'No design tokens yet', null, 2)}
+    
+    SYSTEM CONTEXT:
+    ${context}
+    
+    USER VISION:
+    ${prompt}
+  `;
 
   onProgress('planning');
 
-  // Step 1: Plan the file structure
-  let planJSON: { frontendFiles: Array<{path: string; description: string}>; backendFiles: Array<{path: string; description: string}>; configFiles: Array<{path: string; description: string}>; projectName: string };
+  // Step 1: Industrial Blueprint Planning (Gemini 1.5 Pro)
+  let planJSON: { 
+    frontendFiles: Array<{path: string; description: string}>; 
+    backendFiles: Array<{path: string; description: string}>; 
+    configFiles: Array<{path: string; description: string}>; 
+    projectName: string 
+  };
+  
   try {
-    const planRaw = await groqComplete(PLANNER_SYSTEM_PROMPT, projectContext, 'llama-3.3-70b-versatile');
+    const planRaw = await aiOrchestrator.executeTask(
+      AIModule.PLANNER,
+      { system: PLANNER_SYSTEM_PROMPT, user: projectContext },
+      { jsonMode: true }
+    );
     const cleaned = planRaw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     planJSON = JSON.parse(jsonMatch![0]);
-  } catch {
+    
+    // Validate structure
+    if (!Array.isArray(planJSON.frontendFiles) || !Array.isArray(planJSON.backendFiles)) {
+      throw new Error('Invalid plan structure');
+    }
+  } catch (error) {
+    console.error('[CodeGen] Planning failed or returned invalid JSON, using industrial fallback');
     planJSON = {
-      projectName: 'generated-app',
+      projectName: 'enterprise-app',
       frontendFiles: [
-        { path: 'src/App.jsx', description: 'Main app component with routing' },
-        { path: 'src/components/Header.jsx', description: 'Navigation header' },
-        { path: 'src/pages/Dashboard.jsx', description: 'Main dashboard page' },
-        { path: 'src/index.css', description: 'Global styles' },
+        { path: 'frontend/src/App.tsx', description: 'Root component with React Router and Provisioning' },
+        { path: 'frontend/src/features/dashboard/DashboardPage.tsx', description: 'Complex dashboard with analytics' },
+        { path: 'frontend/src/core/api/client.ts', description: 'Axios interceptors and base configuration' },
       ],
       backendFiles: [
-        { path: 'server.js', description: 'Express.js server with REST API' },
-        { path: 'routes/api.js', description: 'API routes for all entities' },
+        { path: 'backend/src/server.ts', description: 'Enterprise Express entry with security midware' },
+        { path: 'backend/src/controllers/user.controller.ts', description: 'User domain controller' },
+        { path: 'backend/src/models/User.model.ts', description: 'Mongoose user schema with validation' },
       ],
       configFiles: [
-        { path: 'package.json', description: 'Project dependencies' },
-        { path: 'vite.config.js', description: 'Vite configuration' },
-        { path: 'index.html', description: 'HTML entry point' },
-        { path: '.env.example', description: 'Environment variables template' },
+        { path: 'package.json', description: 'Workspace configuration' },
+        { path: 'docker-compose.yml', description: 'Orchestration for mongo/redis' },
       ],
     };
   }
 
   const files: GeneratedFile[] = [];
 
-  // Step 2: Generate frontend files
+  // Step 2: Full-Stack Feature Generation (Parallel Execution)
+  // Generating Frontend
   for (const fileInfo of planJSON.frontendFiles) {
     onProgress('frontend', fileInfo.path);
     try {
-      const content = await groqComplete(
-        'You are a frontend developer. Generate clean React JSX code. Return ONLY the raw code, no markdown fences.',
-        FRONTEND_FILE_PROMPT(fileInfo, projectContext),
-        'llama-3.3-70b-versatile'
+      let content = '';
+      await aiOrchestrator.executeStream(
+        AIModule.FRONTEND,
+        {
+          system: 'You are an Elite Frontend Engineer. Follow the Architecture Blueprint and Design Tokens exactly. Return ONLY code.',
+          user: FRONTEND_FILE_PROMPT(fileInfo, projectContext)
+        },
+        {
+          onChunk: (chunk) => {
+            content += chunk;
+            onProgress('frontend', fileInfo.path, chunk);
+          }
+        }
       );
-      files.push({ path: fileInfo.path, content: content.replace(/```[\w]*\n?/g, '').replace(/```\n?/g, '').trim(), language: getLanguage(fileInfo.path) });
+      files.push({ 
+        path: fileInfo.path, 
+        content: content.replace(/```[\w]*\n?/g, '').replace(/```\n?/g, '').trim(), 
+        language: getLanguage(fileInfo.path) 
+      });
     } catch {
       files.push({ path: fileInfo.path, content: `// Error generating ${fileInfo.path}`, language: getLanguage(fileInfo.path) });
     }
   }
 
-  // Step 3: Generate backend files
+  // Generating Backend
   for (const fileInfo of planJSON.backendFiles) {
     onProgress('backend', fileInfo.path);
     try {
-      const content = await groqComplete(
-        'You are a backend developer. Generate clean Node.js Express code. Return ONLY the raw code, no markdown fences.',
-        BACKEND_FILE_PROMPT(fileInfo, projectContext),
-        'llama-3.3-70b-versatile'
+      let content = '';
+      await aiOrchestrator.executeStream(
+        AIModule.BACKEND,
+        {
+          system: 'You are an Elite Backend Engineer. Implement Clean Architecture and robust MongoDB models. Return ONLY code.',
+          user: BACKEND_FILE_PROMPT(fileInfo, projectContext)
+        },
+        {
+          onChunk: (chunk) => {
+            content += chunk;
+            onProgress('backend', fileInfo.path, chunk);
+          }
+        }
       );
-      files.push({ path: fileInfo.path, content: content.replace(/```[\w]*\n?/g, '').replace(/```\n?/g, '').trim(), language: getLanguage(fileInfo.path) });
+      files.push({ 
+        path: fileInfo.path, 
+        content: content.replace(/```[\w]*\n?/g, '').replace(/```\n?/g, '').trim(), 
+        language: getLanguage(fileInfo.path) 
+      });
     } catch {
       files.push({ path: fileInfo.path, content: `// Error generating ${fileInfo.path}`, language: getLanguage(fileInfo.path) });
     }
   }
 
-  // Step 4: Generate config files (package.json, etc.)
+  // Step 4: Generate config files
   onProgress('config');
 
-  // Detect additional dependencies from prompt and entities
   const dependencies: Record<string, string> = {
     react: '^18.3.1',
     'react-dom': '^18.3.1',
@@ -114,7 +177,6 @@ export const generateProjectCode = async (
   if (lowerPrompt.includes('jwt') || lowerPrompt.includes('token')) dependencies['jsonwebtoken'] = '^9.0.2';
   if (lowerPrompt.includes('zod')) dependencies['zod'] = '^3.23.8';
 
-  // Add package.json
   files.push({
     path: 'package.json',
     content: JSON.stringify({
@@ -128,7 +190,6 @@ export const generateProjectCode = async (
     language: 'json',
   });
 
-  // Add vite.config.js
   files.push({
     path: 'vite.config.js',
     content: `import { defineConfig } from 'vite'
@@ -145,7 +206,6 @@ export default defineConfig({
     language: 'javascript',
   });
 
-  // Add index.html
   files.push({
     path: 'index.html',
     content: `<!DOCTYPE html>
@@ -164,7 +224,6 @@ export default defineConfig({
     language: 'html',
   });
 
-  // Add main.jsx
   files.push({
     path: 'src/main.jsx',
     content: `import { StrictMode } from 'react'
@@ -180,17 +239,20 @@ createRoot(document.getElementById('root')).render(
     language: 'javascript',
   });
 
-  // Add README
+  const entities = nodes.filter(n => n.type === 'database' || n.type === 'service').map(n => n.label);
+  
   onProgress('readme');
   try {
-    const readme = await groqComplete(
-      'You are a technical writer. Generate a clear README.md. Return only markdown.',
-      README_PROMPT(planJSON.projectName, entities, { frontend: 'React + Vite + Tailwind', backend: 'Node.js + Express', database: 'In-memory / JSON' }),
-      'llama-3.3-70b-versatile'
+    const readme = await aiOrchestrator.executeTask(
+      AIModule.WRITER,
+      {
+        system: 'You are a technical writer. Generate a clear README.md. Return only markdown.',
+        user: README_PROMPT(planJSON.projectName, entities, { frontend: 'React + Vite + Tailwind', backend: 'Node.js + Express', database: 'MongoDB (Blueprint-defined)' })
+      }
     );
     files.push({ path: 'README.md', content: readme, language: 'markdown' });
   } catch {
-    files.push({ path: 'README.md', content: `# ${planJSON.projectName}\n\nGenerated by VisualFlow AI\n\n## Run\n\`\`\`\nnpm install\nnpm run dev\n\`\`\``, language: 'markdown' });
+    files.push({ path: 'README.md', content: `# ${planJSON.projectName}\n\nGenerated by VisualFlow AI\n\n## Structure\n- /frontend: React/Vite/Tailwind\n- /backend: Node.js/Express/MongoDB\n\n## Run\n\`\`\`\nnpm install\nnpm run dev\n\`\`\``, language: 'markdown' });
   }
 
   return files;

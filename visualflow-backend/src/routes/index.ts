@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
 import projectRoutes from './projects.routes';
-import canvasRoutes from './canvas.routes';
-import designRoutes from './design.routes';
-import dataRoutes from './data.routes';
-import codeRoutes from './code.routes';
+// ── Feature modules ──────────────────────────────────────────────────────────
+import canvasRoutes from '../modules/canvas/canvas.routes';
+import designRoutes from '../modules/design/design.routes';
+import dataRoutes from '../modules/data/data.routes';
+import codeRoutes from '../modules/ide/code.routes';
 import { requireAuth } from '../middleware/auth.middleware';
 import { ProjectMemory } from '../models/ProjectMemory.model';
 

@@ -5,10 +5,11 @@ import { useAuthStore } from '../stores/auth.store';
 import { api } from '../api/client';
 import { StageBar } from '../components/workspace/StageBar';
 import { AIChatPanel } from '../components/workspace/AIChatPanel';
-import { CanvasStage } from '../components/workspace/stages/CanvasStage';
-import { DesignStage } from '../components/workspace/stages/DesignStage';
 import { PreviewStage } from '../components/workspace/stages/PreviewStage';
-import { IDEStage } from '../components/workspace/stages/IDEStage';
+// ── Feature modules ──────────────────────────────────────────────────────────
+import { CanvasStage } from '../modules/canvas/CanvasStage';
+import { DesignStage } from '../modules/design/DesignStage';
+import { IDEStage }    from '../modules/ide/IDEStage';
 
 export const WorkspacePage = () => {
   const { id } = useParams<{ id: string }>();

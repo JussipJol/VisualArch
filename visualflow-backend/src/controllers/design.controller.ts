@@ -1,11 +1,12 @@
 import { Response } from 'express';
 import { config } from '../config/env';
-import { AuthRequest } from '../types';
+import { AuthRequest, AIModule } from '../types';
 import { Project } from '../models/Project.model';
 import { CanvasIteration } from '../models/CanvasIteration.model';
-import { groqComplete, parseJSON } from '../services/groq.service';
+import { parseJSON } from '../services/groq.service';
 import { DESIGN_SYSTEM_PROMPT } from '../prompts/design.prompts';
 import { buildContext, updateMemory } from '../services/memory.service';
+import { aiOrchestrator } from '../services/ai/orchestrator.service';
 
 // Simple in-memory store for design data (in production use a model)
 // Removed in-memory designStore to fix the root persistence issue
@@ -30,59 +31,46 @@ export const generateDesign = async (req: AuthRequest, res: Response): Promise<v
   res.setHeader('Access-Control-Allow-Origin', config.clientUrl);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-  res.write(`data: ${JSON.stringify({ type: 'status', message: 'Analyzing architecture...' })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: 'status', message: 'Analyzing architectural blueprint...' })}\n\n`);
 
   try {
     await Project.findByIdAndUpdate(projectId, { isGenerating: true });
 
     const context = await buildContext(projectId);
     const canvas = await CanvasIteration.findOne({ projectId }).sort({ version: -1 });
-    const nodesSummary = canvas?.nodes.map(n => `${n.type}: ${n.label} (${n.tech})`).join(', ') || 'Generic web app';
+    
+    // Create an architectural summary for the designer
+    const nodesSummary = canvas?.nodes.map(n => 
+      `${n.label} (${n.tech}): ${n.description}. ${n.databaseMetadata ? 'Has complex DB schema.' : ''}`
+    ).join('\n') || 'Generic web app';
 
-    const userMessage = `Project: ${project.name}\nArchitecture: ${nodesSummary}\nGenerate wireframe JSON for this project.`;
+    const userMessage = `PROJECT: ${project.name}\n\nARCHITECTURE BLUEPRINT:\n${nodesSummary}\n\nCONTEXT:\n${context}\n\nTask: Generate a high-fidelity Design System and Wireframe JSON. Ensure colors and components match the architectural complexity.`;
 
-    res.write(`data: ${JSON.stringify({ type: 'status', message: 'Generating wireframe layout...' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'status', message: 'Designing colored Figma-fidelity layout...' })}\n\n`);
 
-    const FALLBACK_WIREFRAME = {
-      screens: [
-        {
-          id: 'screen-1',
-          name: 'Dashboard',
-          path: '/dashboard',
-          elements: [
-            { id: 'el-1', type: 'navbar',  x: 0,   y: 0,   width: 1280, height: 60,  label: 'Navigation Bar',  content: 'Logo | Links | Avatar' },
-            { id: 'el-2', type: 'sidebar', x: 0,   y: 60,  width: 220,  height: 740, label: 'Sidebar Menu',    content: 'Home\nProjects\nSettings' },
-            { id: 'el-3', type: 'card',    x: 240, y: 80,  width: 260,  height: 130, label: 'Stats Card',      content: 'Total Users' },
-            { id: 'el-4', type: 'card',    x: 520, y: 80,  width: 260,  height: 130, label: 'Revenue Card',    content: '$12,450' },
-            { id: 'el-5', type: 'chart',   x: 240, y: 230, width: 540,  height: 240, label: 'Analytics Chart', content: 'Monthly trend' },
-            { id: 'el-6', type: 'table',   x: 240, y: 490, width: 800,  height: 230, label: 'Data Table',      content: 'Name | Status | Date | Actions' },
-            { id: 'el-7', type: 'footer',  x: 0,   y: 720, width: 1280, height: 80,  label: 'Footer',          content: '© 2025' },
-          ],
-        },
-      ],
-    };
+    const fullContent = await aiOrchestrator.executeTask(
+      AIModule.DESIGNER,
+      { system: DESIGN_SYSTEM_PROMPT, user: userMessage },
+      { jsonMode: true }
+    );
 
     let designData: object;
     try {
-      const fullContent = await groqComplete(DESIGN_SYSTEM_PROMPT, userMessage, 'llama-3.1-8b-instant', true);
       designData = parseJSON(fullContent) as object;
-    } catch (err: unknown) {
-      const status = (err as { status?: number })?.status;
-      if (status === 429) {
-        console.warn('[Design] Rate limit hit — using fallback wireframe');
-        res.write(`data: ${JSON.stringify({ type: 'status', message: 'AI limit reached — loading default wireframe...' })}\n\n`);
-      } else {
-        console.error('[Design] Generation/parse error:', err);
-      }
-      designData = FALLBACK_WIREFRAME;
+    } catch (err) {
+      console.error('[Design] Parse error:', err);
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Failed to parse high-fidelity design' })}\n\n`);
+      res.end();
+      return;
     }
 
-    // Persist to DB instead of memory
+    // Persist to DB
     await Project.findByIdAndUpdate(projectId, { 
       currentStage: 'design', 
       isGenerating: false,
       designSystem: designData 
     });
+    
     await updateMemory(projectId, { incrementIteration: true });
 
     res.write(`data: ${JSON.stringify({ type: 'done', design: designData })}\n\n`);

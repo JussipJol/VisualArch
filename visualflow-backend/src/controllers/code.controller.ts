@@ -37,7 +37,7 @@ export const generateCode = async (req: AuthRequest, res: Response): Promise<voi
     const canvas = await CanvasIteration.findOne({ projectId }).sort({ version: -1 });
     const nodes = canvas?.nodes || [];
 
-    const onProgress = (stage: string, file?: string) => {
+    const onProgress = (stage: string, file?: string, chunk?: string) => {
       const messages: Record<string, string> = {
         planning: 'Planning project structure...',
         frontend: `Generating frontend: ${file || ''}`,
@@ -45,7 +45,13 @@ export const generateCode = async (req: AuthRequest, res: Response): Promise<voi
         config: 'Creating configuration files...',
         readme: 'Writing documentation...',
       };
-      res.write(`data: ${JSON.stringify({ type: 'progress', stage, message: messages[stage] || stage, file })}\n\n`);
+      res.write(`data: ${JSON.stringify({ 
+        type: 'progress', 
+        stage, 
+        message: messages[stage] || stage, 
+        file,
+        chunk 
+      })}\n\n`);
     };
 
     const files = await generateProjectCode(projectId, nodes, prompt || project.name, onProgress);
@@ -66,7 +72,13 @@ export const generateCode = async (req: AuthRequest, res: Response): Promise<voi
     await Project.findByIdAndUpdate(projectId, { currentStage: 'ide', isGenerating: false });
     await updateMemory(projectId, { incrementIteration: true });
 
-    res.write(`data: ${JSON.stringify({ type: 'done', codeId: codeDoc._id.toString(), filesCount: files.length, generationTime })}\n\n`);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'done', 
+      codeId: codeDoc._id.toString(), 
+      files: files.map(f => ({ path: f.path, language: f.language })),
+      version: codeDoc.version, 
+      generationTime 
+    })}\n\n`);
     res.end();
   } catch (err) {
     console.error('[Code] Error:', err);
