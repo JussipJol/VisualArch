@@ -10,7 +10,7 @@ import { updateMemory } from '../services/memory.service';
 
 export const generateCode = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id: projectId } = req.params;
-  const { prompt = '' } = req.body;
+  const { prompt = '', designSystem: overrideDesignSystem } = req.body;
 
   const project = await Project.findOne({ _id: projectId, userId: req.user!.userId });
   if (!project) {
@@ -52,7 +52,7 @@ export const generateCode = async (req: AuthRequest, res: Response): Promise<voi
       })}\n\n`);
     };
 
-    const files = await generateProjectCode(projectId, nodes, prompt || project.name, onProgress);
+    const files = await generateProjectCode(projectId, nodes, prompt || project.name, onProgress, overrideDesignSystem);
     const generationTime = Date.now() - startTime;
 
     // Get existing version

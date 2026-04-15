@@ -26,21 +26,14 @@ export const generateProjectCode = async (
   projectId: string,
   nodes: ICanvasNode[],
   prompt: string,
-  onProgress: (stage: string, file?: string, chunk?: string) => void
+  onProgress: (stage: string, file?: string, chunk?: string) => void,
+  overrideDesignSystem?: any
 ): Promise<GeneratedFile[]> => {
   const context = await buildContext(projectId);
   const project = await Project.findById(projectId);
   
-  // Enrich context with detailed blueprint metadata and design tokens
-  const blueprintDetails = nodes.map(n => ({
-    label: n.label,
-    tech: n.tech,
-    description: n.description,
-    dbSchema: n.databaseMetadata
-  }));
-
-  // Extract design tokens from the wireframe (saved by DesignStage before code gen)
-  const designSystem = project?.designSystem as any;
+  // Use the injected design system if provided, otherwise fallback to DB
+  const designSystem = overrideDesignSystem || (project?.designSystem as any);
   const designTheme = designSystem?.theme || null;
   const designScreens: Array<{ name: string; path: string; elements: Array<{ type: string; label: string }> }> = 
     designSystem?.screens || [];

@@ -23,6 +23,16 @@ Your goal is to generate "Aura & Precision" level wireframes that are FUNCTIONAL
 - borderRadius: 12 (Modern default)
 - fontFamily: "Inter", "Outfit", or "JetBrains Mono"
 
+━━━ CANVAS & COORDINATES — MANDATORY ━━━
+1. RESOLUTION: The canvas is exactly 1280 x 800 pixels.
+2. COORDINATES: Use absolute pixel values for x, y, width, and height.
+3. COMPONENT SCALING:
+   - Navbar: MUST be x=0, y=0, width=1280, height=64.
+   - Sidebar: MUST be x=0, y=64, width=240, height=736.
+   - Hero Section: Should be ~1000px wide, centered (x=140).
+   - Cards: Standard size is 300x200 or 400x250.
+4. SPACING: Use a strict 8px grid (8, 16, 24, 32, 48, 64).
+
 ━━━ COMPONENT JSON STRUCTURE ━━━
 {
   "theme": { ...tokens... },
@@ -36,11 +46,11 @@ Your goal is to generate "Aura & Precision" level wireframes that are FUNCTIONAL
           "id": "el_id", 
           "type": "navbar|sidebar|card|button|table|chart|input|hero|footer|modal", 
           "x": number, "y": number, "width": number, "height": number, 
-          "label": "Meaningful Label (e.g. 'Submit Payment')", 
-          "content": "Specific context-aware text (e.g. 'Project Alpha Active')",
+          "label": "Meaningful Label", 
+          "content": "Contextual text content",
           "style": {
              "variant": "primary|secondary|ghost|outline",
-             "color": "HEX (neon accents)",
+             "color": "HEX",
              "isGlass": true
           }
         }

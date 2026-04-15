@@ -129,7 +129,7 @@ export const DesignStage = ({ projectId }: { projectId: string }) => {
 
       setStatus('Design saved. Generating code...');
 
-      await stream(`/projects/${projectId}/code/generate`, { prompt: '' }, {
+      await stream(`/projects/${projectId}/code/generate`, { prompt: '', designSystem: designPayload }, {
         onStatus: msg => setStatus(msg),
         onProgress: (stage, file) => setStatus(`${stage}: ${file || '...'}`),
         onDone: async (data: any) => {
