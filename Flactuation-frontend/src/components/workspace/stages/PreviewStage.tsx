@@ -138,8 +138,11 @@ export const PreviewStage = ({ projectId }: { projectId: string }) => {
       onStatus: msg => setStatus(msg),
       onDone: async (data: any) => {
         setStatus('Loading preview...');
-        if (data.files) setCode(data.files, data.codeId || '');
-        await loadAllFiles(data.codeId || undefined);
+        if (data.files) {
+          setCode(data.files, data.codeId || '');
+          // Explicitly call loadAllFiles to ensure the new version is fetched
+          await loadAllFiles(data.codeId);
+        }
         setStatus('');
         setGenerating(false);
       },

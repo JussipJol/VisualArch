@@ -31,6 +31,7 @@ export const IDEStage = ({ projectId }: { projectId: string }) => {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [fileContent, setFileContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -56,6 +57,28 @@ export const IDEStage = ({ projectId }: { projectId: string }) => {
       setFileContent('// Error loading file');
     }).finally(() => setLoading(false));
   }, [selectedFile?.path, projectId]);
+
+  const handleSave = async () => {
+    if (!selectedFile || loading) return;
+    setLoading(true);
+    try {
+      const { data } = await api.put(`/projects/${projectId}/code/file`, {
+        path: selectedFile.path,
+        content: fileContent,
+      });
+      if (data.success) {
+        // Update global store with NEW version ID
+        // This triggers PreviewStage reload
+        setCode(data.files, data.codeId);
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
+      }
+    } catch (err) {
+      console.error('[IDE] Save failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -95,6 +118,24 @@ export const IDEStage = ({ projectId }: { projectId: string }) => {
         {codeFiles.length > 0 && (
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', letterSpacing: 1 }}>{codeFiles.length} FILES</span>
         )}
+        <button
+          onClick={handleSave}
+          disabled={!selectedFile || loading}
+          style={{
+            background: saveSuccess ? 'rgba(16,185,129,0.1)' : 'transparent',
+            border: `1px solid ${saveSuccess ? '#10b981' : '#3b82f6'}`,
+            color: saveSuccess ? '#10b981' : '#3b82f6',
+            padding: '8px 20px',
+            cursor: loading ? 'wait' : 'pointer',
+            fontFamily: 'inherit',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            letterSpacing: 1,
+            transition: 'all 0.2s'
+          }}
+        >
+          {loading ? 'SAVING...' : saveSuccess ? '✓ SAVED!' : 'SAVE CHANGES'}
+        </button>
         <button onClick={handleDownload} disabled={codeFiles.length === 0 || downloading} style={{ background: downloading ? 'transparent' : '#fff', color: '#000', border: '1px solid rgba(255,255,255,0.3)', padding: '8px 20px', cursor: codeFiles.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: 700, letterSpacing: 1, opacity: codeFiles.length === 0 ? 0.3 : 1, transition: 'all 0.2s' }}>
           {downloading ? 'DOWNLOADING...' : '↓ DOWNLOAD ZIP'}
         </button>
@@ -159,9 +200,10 @@ export const IDEStage = ({ projectId }: { projectId: string }) => {
                 height="100%"
                 language={langToMonaco[selectedFile?.language || ''] || 'plaintext'}
                 value={fileContent}
+                onChange={(val) => setFileContent(val || '')}
                 theme="vs-dark"
                 options={{
-                  readOnly: true,
+                  readOnly: false,
                   fontSize: 13,
                   fontFamily: '"Space Mono", "Consolas", monospace',
                   minimap: { enabled: false },
@@ -170,6 +212,7 @@ export const IDEStage = ({ projectId }: { projectId: string }) => {
                   lineNumbers: 'on',
                   renderLineHighlight: 'line',
                   padding: { top: 12 },
+                  automaticLayout: true,
                 }}
               />
             )}
