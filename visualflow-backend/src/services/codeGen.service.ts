@@ -32,6 +32,14 @@ export const generateProjectCode = async (
   const context = await buildContext(projectId);
   const project = await Project.findById(projectId);
   
+  // Enrich context with detailed blueprint metadata and design tokens
+  const blueprintDetails = nodes.map(n => ({
+    label: n.label,
+    tech: n.tech,
+    description: n.description,
+    dbSchema: n.databaseMetadata
+  }));
+
   // Use the injected design system if provided, otherwise fallback to DB
   const designSystem = overrideDesignSystem || (project?.designSystem as any);
   const designTheme = designSystem?.theme || null;
@@ -301,7 +309,7 @@ createRoot(document.getElementById('root')).render(
     const readme = await aiOrchestrator.executeTask(
       AIModule.WRITER,
       {
-        system: 'You are a technical writer. Generate a clear README.md. Return only markdown.',
+        system: 'You are a technical writer. Generate a clear README.md. Focus on RUN INSTRUCTIONS. Return only markdown.',
         user: README_PROMPT(planJSON.projectName, entities, { frontend: 'React + Vite + Tailwind', backend: 'Node.js + Express', database: 'MongoDB (Blueprint-defined)' })
       }
     );

@@ -62,6 +62,7 @@ export const README_PROMPT = (name: string, entities: string[], stack: any) =>
   - High-level Architectural Overview.
   - Detailed Tech Stack (${JSON.stringify(stack)}).
   - Entity-Relationship walkthrough (${entities.join(', ')}).
-  - Setup and Deployment instructions for multi-container environments.
+  - MANDATORY: Step-by-step Run Instructions (npm install, npm run dev).
+  - Deployment instructions for multi-container environments.
   
   Return only clean Markdown.`;
