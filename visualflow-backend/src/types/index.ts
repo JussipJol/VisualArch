@@ -21,6 +21,12 @@ export interface IProject extends Document {
     backend: string;
     database: string;
   };
+  collaborators: Array<{
+    userId: Types.ObjectId;
+    role: 'editor' | 'viewer';
+  }>;
+  isGenerating: boolean;
+  designSystem: any;
   createdAt: Date;
   updatedAt: Date;
 }

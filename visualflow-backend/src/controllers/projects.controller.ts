@@ -6,7 +6,13 @@ import { Types } from 'mongoose';
 
 export const getProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const projects = await Project.find({ userId: req.user!.userId }).sort({ updatedAt: -1 });
+    // Return projects the user owns OR is a collaborator on
+    const projects = await Project.find({
+      $or: [
+        { userId: req.user!.userId },
+        { 'collaborators.userId': new Types.ObjectId(req.user!.userId) },
+      ]
+    }).sort({ updatedAt: -1 });
     res.json({ projects });
   } catch {
     res.status(500).json({ error: 'Failed to fetch projects' });
@@ -35,7 +41,13 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
 
 export const getProject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const project = await Project.findOne({ _id: req.params.id, userId: req.user!.userId });
+    const project = await Project.findOne({
+      _id: req.params.id,
+      $or: [
+        { userId: req.user!.userId },
+        { 'collaborators.userId': new Types.ObjectId(req.user!.userId) },
+      ],
+    });
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
       return;
@@ -50,7 +62,13 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { name, description, currentStage, designSystem } = req.body;
     const project = await Project.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user!.userId },
+      {
+        _id: req.params.id,
+        $or: [
+          { userId: req.user!.userId },
+          { 'collaborators.userId': new Types.ObjectId(req.user!.userId) },
+        ],
+      },
       {
         ...(name && { name }),
         ...(description !== undefined && { description }),

@@ -5,6 +5,7 @@ import { LandingPage } from './pages/LandingPage';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { WorkspacePage } from './pages/WorkspacePage';
+import { JoinPage } from './pages/JoinPage';
 import { useAuthStore } from './stores/auth.store';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
@@ -82,6 +83,7 @@ const AppContent = () => {
         } />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<AuthPage mode="register" />} />
+        <Route path="/join/:token" element={<JoinPage />} />
         <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
         <Route path="/workspace/:id" element={<PrivateRoute><WorkspacePage /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
