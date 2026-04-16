@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Ангелина/Downloads/VITE_API_URL/VisualArch-frontend-backend/Flactuation-frontend/src/context/**)"
+    ]
+  }
+}
