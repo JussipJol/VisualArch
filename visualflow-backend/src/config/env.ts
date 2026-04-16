@@ -22,4 +22,12 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtExpiresIn: '15m',
   jwtRefreshExpiresIn: '7d',
+  githubClientId: process.env.GITHUB_CLIENT_ID!,
+  githubClientSecret: process.env.GITHUB_CLIENT_SECRET!,
+  discordClientId: process.env.DISCORD_CLIENT_ID!,
+  discordClientSecret: process.env.DISCORD_CLIENT_SECRET!,
+  googleClientId: process.env.GOOGLE_CLIENT_ID!,
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET!,
 };
+
+

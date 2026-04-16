@@ -4,9 +4,12 @@ import { Document, Types } from 'mongoose';
 export interface IUser extends Document {
   _id: Types.ObjectId;
   email: string;
-  passwordHash: string;
+  passwordHash: string | null;
   name: string;
   plan: 'free' | 'pro';
+  oauthProvider: string | null;
+  oauthId: string | null;
+  avatar: string | null;
   createdAt: Date;
 }
 
