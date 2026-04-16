@@ -38,8 +38,8 @@ for (const key of required) {
 
 export const config = {
   // Server
-  port: parseInt(process.env.PORT  '5000'),
-  nodeEnv: process.env.NODE_ENV  'development',
+  port: parseInt(process.env.PORT || '5000'),
+  nodeEnv: process.env.NODE_ENV || 'development',
 
   // Database
   mongoUri: process.env.MONGODB_URI!,

@@ -62,26 +62,7 @@ export interface ICanvasNode {
   y: number;
 }
 
-// ... rest of the file ...
-export interface DesignSystem {
-  screens: Array<{ 
-    id: string;
-    name: string; 
-    description: string; 
-    path: string;
-    elements: Array<any>;
-  }>;
-  theme: {
-    primary: string;
-    secondary: string;
-    accent: string;
-    surface: string;
-    background: string;
-    text: string;
-    borderRadius: number;
-    fontFamily: string;
-  };
-}
+
 
 export interface ICanvasEdge {
   id: string;
