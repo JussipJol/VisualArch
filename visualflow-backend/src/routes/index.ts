@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
 import projectRoutes from './projects.routes';
+<<<<<<< HEAD
+=======
+import inviteRoutes from './invite.routes';
+>>>>>>> 48106fb (update project)
 // ── Feature modules ──────────────────────────────────────────────────────────
 import canvasRoutes from '../modules/canvas/canvas.routes';
 import designRoutes from '../modules/design/design.routes';
@@ -13,6 +17,10 @@ const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/projects', projectRoutes);
+<<<<<<< HEAD
+=======
+router.use('/', inviteRoutes);
+>>>>>>> 48106fb (update project)
 router.use('/projects/:id/canvas', canvasRoutes);
 router.use('/projects/:id/design', designRoutes);
 router.use('/projects/:id/data', dataRoutes);

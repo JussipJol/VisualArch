@@ -9,6 +9,25 @@ export interface WfElement {
   height: number;
   label: string;
   content?: string;
+<<<<<<< HEAD
+=======
+  style?: {
+    variant?: 'primary' | 'secondary' | 'ghost' | 'outline';
+    color?: string;
+    isGlass?: boolean;
+    opacity?: number;
+  };
+}
+
+interface WfTheme {
+  primary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  text: string;
+  borderRadius: number;
+  fontFamily: string;
+>>>>>>> 48106fb (update project)
 }
 
 interface DragState {
@@ -26,6 +45,7 @@ interface DragState {
 export const CANVAS_W = 1280;
 export const CANVAS_H = 800;
 
+<<<<<<< HEAD
 const TYPE_STYLE: Record<string, { bg: string; border: string; dashed?: boolean }> = {
   navbar:    { bg: '#ebebeb', border: '#b0b0b0' },
   sidebar:   { bg: '#efefef', border: '#b8b8b8' },
@@ -47,6 +67,25 @@ const TYPE_STYLE: Record<string, { bg: string; border: string; dashed?: boolean 
 
 const getStyle = (type: string) => TYPE_STYLE[type] ?? { bg: '#f0f0f0', border: '#c0c0c0' };
 
+=======
+const getBaseStyle = (type: string, theme: WfTheme) => {
+  const styles: Record<string, { bg: string; border: string; borderStyle?: string }> = {
+    navbar:    { bg: 'rgba(15,23,42,0.8)', border: 'rgba(255,255,255,0.1)' },
+    sidebar:   { bg: 'rgba(15,23,42,0.9)', border: 'rgba(255,255,255,0.1)' },
+    card:      { bg: theme.surface, border: 'rgba(255,255,255,0.1)' },
+    button:    { bg: theme.primary, border: 'transparent' },
+    input:     { bg: 'rgba(0,0,0,0.2)', border: 'rgba(255,255,255,0.1)' },
+    text:      { bg: 'transparent', border: 'rgba(255,255,255,0.05)', borderStyle: 'dashed' },
+    image:     { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.1)' },
+    table:     { bg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.08)' },
+    chart:     { bg: 'transparent', border: 'transparent' },
+    modal:     { bg: '#1e293b', border: theme.accent },
+    hero:      { bg: 'transparent', border: 'transparent' },
+  };
+  return styles[type] ?? { bg: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.1)' };
+};
+
+>>>>>>> 48106fb (update project)
 // Deterministic hash so patterns don't change on re-render
 const hash = (s: string) => {
   let h = 0;
@@ -56,15 +95,27 @@ const hash = (s: string) => {
 
 const CHART_BARS = [0.42, 0.68, 0.55, 0.82, 0.61, 0.74, 0.50, 0.70];
 
+<<<<<<< HEAD
 const ElementFill = ({ el }: { el: WfElement }) => {
   const { type, width: w, height: h, id } = el;
+=======
+const ElementFill = ({ el, theme }: { el: WfElement, theme: WfTheme }) => {
+  const { type, width: w, height: h, id, style } = el;
+  const accent = style?.color || theme.accent;
+>>>>>>> 48106fb (update project)
 
   if (type === 'image') {
     return (
       <svg width={w} height={h} style={{ position: 'absolute', inset: 0 }}>
+<<<<<<< HEAD
         <line x1={0} y1={0} x2={w} y2={h} stroke="#aaa" strokeWidth={1.5} />
         <line x1={w} y1={0} x2={0} y2={h} stroke="#aaa" strokeWidth={1.5} />
         <rect x={w / 2 - 16} y={h / 2 - 12} width={32} height={24} rx={3} fill="none" stroke="#aaa" strokeWidth={1.5} />
+=======
+        <line x1={0} y1={0} x2={w} y2={h} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
+        <line x1={w} y1={0} x2={0} y2={h} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
+        <rect x={w / 2 - 16} y={h / 2 - 12} width={32} height={24} rx={3} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={1.5} />
+>>>>>>> 48106fb (update project)
       </svg>
     );
   }
@@ -76,9 +127,12 @@ const ElementFill = ({ el }: { el: WfElement }) => {
     const seed = hash(id);
     return (
       <svg width={w} height={h} style={{ position: 'absolute', inset: 0 }}>
+<<<<<<< HEAD
         {/* Axes */}
         <line x1={20} y1={10} x2={20} y2={h - 20} stroke="#bbb" strokeWidth={1} />
         <line x1={20} y1={h - 20} x2={w - 10} y2={h - 20} stroke="#bbb" strokeWidth={1} />
+=======
+>>>>>>> 48106fb (update project)
         {Array.from({ length: barCount }).map((_, i) => {
           const barH = CHART_BARS[(seed + i) % CHART_BARS.length] * maxH;
           return (
@@ -88,6 +142,7 @@ const ElementFill = ({ el }: { el: WfElement }) => {
               y={h - 20 - barH}
               width={barW}
               height={barH}
+<<<<<<< HEAD
               fill="#c8cdd6"
               rx={2}
             />
@@ -104,12 +159,31 @@ const ElementFill = ({ el }: { el: WfElement }) => {
             const cx = 24 + i * (barW + 6) + barW / 2;
             return `${cx},${h - 20 - bh}`;
           }).join(' ')}
+=======
+              fill={i % 2 === 0 ? accent : theme.primary}
+              opacity={0.6}
+              rx={4}
+            />
+          );
+        })}
+        <path
+          d={Array.from({ length: barCount }).map((_, i) => {
+            const bh = CHART_BARS[(seed + i) % CHART_BARS.length] * maxH;
+            const cx = 24 + i * (barW + 6) + barW / 2;
+            return `${i === 0 ? 'M' : 'L'} ${cx} ${h - 20 - bh}`;
+          }).join(' ')}
+          fill="none"
+          stroke={accent}
+          strokeWidth={2}
+          filter="drop-shadow(0 0 4px rgba(0,242,255,0.3))"
+>>>>>>> 48106fb (update project)
         />
       </svg>
     );
   }
 
   if (type === 'table') {
+<<<<<<< HEAD
     const rows = Math.max(2, Math.floor(h / 28));
     const cols = Math.max(2, Math.floor(w / 100));
     const rowH = h / rows;
@@ -138,6 +212,19 @@ const ElementFill = ({ el }: { el: WfElement }) => {
             />
           ))
         )}
+=======
+    const rows = Math.max(2, Math.floor(h / 32));
+    const rowH = h / rows;
+    return (
+      <svg width={w} height={h} style={{ position: 'absolute', inset: 0 }}>
+        <rect x={0} y={0} width={w} height={rowH} fill="rgba(255,255,255,0.05)" />
+        {Array.from({ length: rows }).map((_, i) => (
+          <line key={i} x1={0} y1={i * rowH} x2={w} y2={i * rowH} stroke="rgba(255,255,255,0.05)" strokeWidth={1} />
+        ))}
+        {Array.from({ length: Math.min(rows - 1, 6) }).map((_, ri) => (
+          <rect key={ri} x={16} y={(ri + 1) * rowH + 12} width={w * 0.4} height={8} fill="rgba(255,255,255,0.1)" rx={2} />
+        ))}
+>>>>>>> 48106fb (update project)
       </svg>
     );
   }
@@ -171,6 +258,7 @@ const ElementFill = ({ el }: { el: WfElement }) => {
   if (type === 'navbar') {
     return (
       <svg width={w} height={h} style={{ position: 'absolute', inset: 0 }}>
+<<<<<<< HEAD
         {/* Logo placeholder */}
         <rect x={16} y={h / 2 - 10} width={60} height={20} fill="#d0d0d0" rx={3} />
         {/* Nav links */}
@@ -179,6 +267,13 @@ const ElementFill = ({ el }: { el: WfElement }) => {
         ))}
         {/* Avatar */}
         <circle cx={w - 30} cy={h / 2} r={14} fill="#d0d0d0" />
+=======
+        <rect x={20} y={h/2 - 10} width={20} height={20} fill={accent} rx={4} />
+        {[100, 180, 260].map((x, i) => (
+          <rect key={i} x={x} y={h/2 - 4} width={50} height={8} fill="rgba(255,255,255,0.2)" rx={2} />
+        ))}
+        <circle cx={w - 30} cy={h/2} r={12} fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" />
+>>>>>>> 48106fb (update project)
       </svg>
     );
   }
@@ -226,9 +321,16 @@ const ElementFill = ({ el }: { el: WfElement }) => {
   if (type === 'card') {
     return (
       <svg width={w} height={h} style={{ position: 'absolute', inset: 0 }}>
+<<<<<<< HEAD
         <rect x={16} y={14} width={w * 0.45} height={10} fill="#d8d8d8" rx={2} />
         <rect x={16} y={38} width={w * 0.55} height={24} fill="#c8c8c8" rx={3} />
         <rect x={16} y={h - 30} width={w * 0.4} height={10} fill="#ddd" rx={2} />
+=======
+        <rect x={20} y={20} width={w * 0.4} height={12} fill="rgba(255,255,255,0.15)" rx={2} />
+        <rect x={20} y={44} width={w - 40} height={8} fill="rgba(255,255,255,0.05)" rx={2} />
+        <rect x={20} y={58} width={w - 80} height={8} fill="rgba(255,255,255,0.05)" rx={2} />
+        <rect x={20} y={h - 36} width={100} height={24} fill="rgba(255,255,255,0.08)" rx={4} />
+>>>>>>> 48106fb (update project)
       </svg>
     );
   }
@@ -278,12 +380,20 @@ interface Props {
   elements: WfElement[];
   selectedId: string | null;
   scale: number;
+<<<<<<< HEAD
+=======
+  theme: WfTheme;
+>>>>>>> 48106fb (update project)
   onSelect: (id: string | null) => void;
   onChange: (elements: WfElement[]) => void;
   onLabelEdit: (id: string) => void;
 }
 
+<<<<<<< HEAD
 export const WireframeCanvas = ({ elements, selectedId, scale, onSelect, onChange, onLabelEdit }: Props) => {
+=======
+export const WireframeCanvas = ({ elements, selectedId, scale, theme, onSelect, onChange, onLabelEdit }: Props) => {
+>>>>>>> 48106fb (update project)
   const dragRef = useRef<DragState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -360,17 +470,30 @@ export const WireframeCanvas = ({ elements, selectedId, scale, onSelect, onChang
       style={{
         width: CANVAS_W,
         height: CANVAS_H,
+<<<<<<< HEAD
         background: '#ffffff',
         position: 'relative',
         userSelect: 'none',
         flexShrink: 0,
+=======
+        background: theme.background,
+        position: 'relative',
+        userSelect: 'none',
+        flexShrink: 0,
+        boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+>>>>>>> 48106fb (update project)
       }}
     >
       {/* Dot grid */}
       <svg width={CANVAS_W} height={CANVAS_H} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         <defs>
+<<<<<<< HEAD
           <pattern id="wf-dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
             <circle cx="10" cy="10" r="0.8" fill="rgba(0,0,0,0.12)" />
+=======
+          <pattern id="wf-dots" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+            <circle cx="20" cy="20" r="1" fill="rgba(255,255,255,0.05)" />
+>>>>>>> 48106fb (update project)
           </pattern>
         </defs>
         <rect width={CANVAS_W} height={CANVAS_H} fill="url(#wf-dots)" />
@@ -381,9 +504,17 @@ export const WireframeCanvas = ({ elements, selectedId, scale, onSelect, onChang
       <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 1, background: 'rgba(0,0,0,0.06)', pointerEvents: 'none' }} />
 
       {elements.map(el => {
+<<<<<<< HEAD
         const s = getStyle(el.type);
         const isSelected = el.id === selectedId;
         const fontSize = Math.max(9, Math.min(13, el.height * 0.16, el.width * 0.1));
+=======
+        const s = getBaseStyle(el.type, theme);
+        const isSelected = el.id === selectedId;
+        const fontSize = Math.max(9, Math.min(13, el.height * 0.16, el.width * 0.1));
+        const isGlass = el.style?.isGlass !== false;
+        const customColor = el.style?.color;
+>>>>>>> 48106fb (update project)
 
         return (
           <div
@@ -394,6 +525,7 @@ export const WireframeCanvas = ({ elements, selectedId, scale, onSelect, onChang
               position: 'absolute',
               left: el.x,
               top: el.y,
+<<<<<<< HEAD
               width: el.width,
               height: el.height,
               background: s.bg,
@@ -405,6 +537,22 @@ export const WireframeCanvas = ({ elements, selectedId, scale, onSelect, onChang
             }}
           >
             <ElementFill el={el} />
+=======
+              width: Math.max(20, el.width),
+              height: Math.max(16, el.height),
+              background: isGlass ? (el.type === 'button' ? (customColor || theme.primary) : theme.surface) : (customColor || s.bg),
+              border: `${isSelected ? 2 : 1}px ${s.borderStyle || 'solid'} ${isSelected ? theme.accent : (customColor || s.border)}`,
+              borderRadius: theme.borderRadius,
+              boxSizing: 'border-box',
+              cursor: dragRef.current?.mode === 'move' ? 'grabbing' : 'grab',
+              overflow: 'hidden',
+              boxShadow: isSelected ? `0 0 20px ${theme.accent}44` : '0 4px 12px rgba(0,0,0,0.2)',
+              backdropFilter: isGlass ? 'blur(8px)' : 'none',
+              zIndex: isSelected ? 50 : 1,
+            }}
+          >
+            <ElementFill el={el} theme={theme} />
+>>>>>>> 48106fb (update project)
 
             {/* Type tag */}
             <div style={{
@@ -430,6 +578,7 @@ export const WireframeCanvas = ({ elements, selectedId, scale, onSelect, onChang
               alignItems: 'center',
               justifyContent: 'center',
               fontSize,
+<<<<<<< HEAD
               color: '#666',
               fontFamily: 'system-ui, sans-serif',
               fontWeight: 500,
@@ -437,6 +586,18 @@ export const WireframeCanvas = ({ elements, selectedId, scale, onSelect, onChang
               pointerEvents: 'none',
               padding: '14px 8px 4px',
               lineHeight: 1.3,
+=======
+              color: el.type === 'button' ? '#fff' : theme.text,
+              fontFamily: theme.fontFamily,
+              fontWeight: 600,
+              textAlign: 'center',
+              pointerEvents: 'none',
+              padding: '14px 8px 4px',
+              lineHeight: 1.2,
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+              textShadow: el.type === 'button' ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+>>>>>>> 48106fb (update project)
             }}>
               {el.label}
             </div>

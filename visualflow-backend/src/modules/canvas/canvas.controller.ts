@@ -29,8 +29,11 @@ export const generateCanvas = async (req: AuthRequest, res: Response): Promise<v
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+<<<<<<< HEAD
   res.setHeader('Access-Control-Allow-Origin', config.clientUrl);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
+=======
+>>>>>>> 48106fb (update project)
 
   res.write(`data: ${JSON.stringify({ type: 'status', message: 'Initializing AI architect...' })}\n\n`);
 
@@ -58,6 +61,10 @@ export const generateCanvas = async (req: AuthRequest, res: Response): Promise<v
       edges: ICanvasEdge[];
       stack?: { frontend: string; backend: string; database: string; infrastructure?: string };
       architecture_notes?: string;
+<<<<<<< HEAD
+=======
+      decisions?: Array<{ topic: string; decision: string; reasoning: string }>;
+>>>>>>> 48106fb (update project)
     };
 
     try {
@@ -68,8 +75,13 @@ export const generateCanvas = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+<<<<<<< HEAD
     // Apply professional Golden Symmetry layout
     canvasData.nodes = autoLayout(canvasData.nodes);
+=======
+    // Apply professional layout based on mode
+    canvasData.nodes = autoLayout(canvasData.nodes, mode as any);
+>>>>>>> 48106fb (update project)
 
     // Sanitize edges to prevent duplicate React keys
     const seenEdgeIds = new Set<string>();

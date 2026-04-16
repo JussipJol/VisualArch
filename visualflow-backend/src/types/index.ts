@@ -4,8 +4,16 @@ import { Document, Types } from 'mongoose';
 export interface IUser extends Document {
   _id: Types.ObjectId;
   email: string;
+<<<<<<< HEAD
   passwordHash: string;
   name: string;
+=======
+  passwordHash?: string;
+  name: string;
+  githubId?: string;
+  discordId?: string;
+  googleId?: string;
+>>>>>>> 48106fb (update project)
   plan: 'free' | 'pro';
   createdAt: Date;
 }
@@ -21,6 +29,15 @@ export interface IProject extends Document {
     backend: string;
     database: string;
   };
+<<<<<<< HEAD
+=======
+  collaborators: Array<{
+    userId: Types.ObjectId;
+    role: 'editor' | 'viewer';
+  }>;
+  isGenerating: boolean;
+  designSystem: any;
+>>>>>>> 48106fb (update project)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -136,6 +153,7 @@ export interface AuthRequest extends Request {
   };
 }
 
+<<<<<<< HEAD
 export interface DesignSystem {
   screens: Array<{ name: string; description: string; path: string }>;
   components: Array<{
@@ -159,6 +177,9 @@ export interface DesignSystem {
   };
   spacing: Record<string, string>;
 }
+=======
+
+>>>>>>> 48106fb (update project)
 
 export interface DBSchema {
   entities: Array<{

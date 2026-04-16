@@ -5,6 +5,10 @@ import { useAuthStore } from '../stores/auth.store';
 import { api } from '../api/client';
 import { StageBar } from '../components/workspace/StageBar';
 import { AIChatPanel } from '../components/workspace/AIChatPanel';
+<<<<<<< HEAD
+=======
+import { ShareModal } from '../components/workspace/ShareModal';
+>>>>>>> 48106fb (update project)
 import { PreviewStage } from '../components/workspace/stages/PreviewStage';
 // ── Feature modules ──────────────────────────────────────────────────────────
 import { CanvasStage } from '../modules/canvas/CanvasStage';
@@ -18,6 +22,13 @@ export const WorkspacePage = () => {
   const { project, currentStage, setProject, reset, isGenerating } = useWorkspaceStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+<<<<<<< HEAD
+=======
+  const [showShare, setShowShare] = useState(false);
+
+  // Determine if the current user is the project owner
+  const isOwner = !!(user?.id && project?.userId && String(project.userId) === String(user.id));
+>>>>>>> 48106fb (update project)
 
   useEffect(() => {
     reset();
@@ -80,6 +91,30 @@ export const WorkspacePage = () => {
           </div>
         )}
         <div style={{ flex: 1 }} />
+<<<<<<< HEAD
+=======
+        {/* Share button — only for owner */}
+        {isOwner && id && (
+          <button
+            onClick={() => setShowShare(true)}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.15)',
+              color: 'rgba(255,255,255,0.5)',
+              padding: '6px 16px',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: '0.68rem',
+              letterSpacing: 1.5,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
+          >
+            ⟨/⟩ SHARE
+          </button>
+        )}
+>>>>>>> 48106fb (update project)
         <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)' }}>{user?.email}</span>
       </div>
 
@@ -97,6 +132,18 @@ export const WorkspacePage = () => {
           {id && <AIChatPanel projectId={id} />}
         </div>
       </div>
+<<<<<<< HEAD
+=======
+
+      {/* Share Modal */}
+      {showShare && id && project && (
+        <ShareModal
+          projectId={id}
+          projectName={project.name}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+>>>>>>> 48106fb (update project)
     </div>
   );
 };

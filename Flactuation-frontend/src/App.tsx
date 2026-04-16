@@ -1,11 +1,31 @@
 import { useEffect } from 'react';
+<<<<<<< HEAD
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+=======
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+>>>>>>> 48106fb (update project)
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { LandingPage } from './pages/LandingPage';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { WorkspacePage } from './pages/WorkspacePage';
+<<<<<<< HEAD
 import { useAuthStore } from './stores/auth.store';
+=======
+import { JoinPage } from './pages/JoinPage';
+import { useAuthStore } from './stores/auth.store';
+import { ScrollToTop } from './components/ScrollToTop';
+
+// Обёртка для page-transition анимации
+const PageWrapper = ({ children }: { children: React.ReactNode }) => {
+  const { pathname } = useLocation();
+  return (
+    <div key={pathname} className="page-enter" style={{ width: '100%', height: '100%' }}>
+      {children}
+    </div>
+  );
+};
+>>>>>>> 48106fb (update project)
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, token } = useAuthStore();
@@ -23,6 +43,7 @@ const AppContent = () => {
 
   return (
     <Router>
+<<<<<<< HEAD
       <Routes>
         <Route path="/" element={
           <>
@@ -67,10 +88,42 @@ const AppContent = () => {
                     {t('nav.login')}
                   </Link>
                   <Link to="/register" style={{
+=======
+      <ScrollToTop />
+      <Routes>
+        <Route path="/" element={
+          <PageWrapper>
+            <>
+              {/* Global Header — only on landing */}
+              <div style={{
+                position: 'absolute', top: 40, right: 50, zIndex: 999,
+                display: 'flex', gap: '20px', alignItems: 'center'
+              }}>
+                <div
+                  onClick={toggleLang}
+                  style={{
+                    display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)',
+                    borderRadius: '20px', padding: '2px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)',
+                    width: '60px', height: '28px', position: 'relative', marginRight: '20px'
+                  }}>
+                  <div style={{
+                    position: 'absolute', width: '26px', height: '24px', backgroundColor: '#fff', borderRadius: '15px',
+                    top: '1px', left: lang === 'en' ? '2px' : '30px', transition: 'left 0.3s cubic-bezier(0.8, 0, 0.2, 1)', zIndex: 1
+                  }} />
+                  <div style={{ zIndex: 2, display: 'flex', width: '100%', justifyContent: 'space-around', fontSize: '0.65rem', fontWeight: 900, fontFamily: '"Space Mono", monospace' }}>
+                    <span style={{ color: lang === 'en' ? '#000' : 'rgba(255,255,255,0.5)', transition: 'color 0.3s' }}>EN</span>
+                    <span style={{ color: lang === 'ru' ? '#000' : 'rgba(255,255,255,0.5)', transition: 'color 0.3s' }}>RU</span>
+                  </div>
+                </div>
+
+                {token ? (
+                  <Link to="/dashboard" style={{
+>>>>>>> 48106fb (update project)
                     background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none',
                     color: '#ffffff', padding: '10px 24px', borderRadius: '30px',
                     fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600, fontFamily: '"Space Mono", monospace',
                     letterSpacing: '1px', textTransform: 'uppercase', backdropFilter: 'blur(10px)', transition: 'all 0.4s ease',
+<<<<<<< HEAD
                   }}>
                     {t('nav.register')}
                   </Link>
@@ -84,6 +137,40 @@ const AppContent = () => {
         <Route path="/register" element={<AuthPage mode="register" />} />
         <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
         <Route path="/workspace/:id" element={<PrivateRoute><WorkspacePage /></PrivateRoute>} />
+=======
+                  }}>DASHBOARD</Link>
+                ) : (
+                  <>
+                    <Link to="/login" style={{
+                      background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', textDecoration: 'none',
+                      fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600, fontFamily: '"Space Mono", monospace',
+                      letterSpacing: '1px', textTransform: 'uppercase', transition: 'color 0.4s ease'
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}>
+                      {t('nav.login')}
+                    </Link>
+                    <Link to="/register" style={{
+                      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.2)', textDecoration: 'none',
+                      color: '#ffffff', padding: '10px 24px', borderRadius: '30px',
+                      fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600, fontFamily: '"Space Mono", monospace',
+                      letterSpacing: '1px', textTransform: 'uppercase', backdropFilter: 'blur(10px)', transition: 'all 0.4s ease',
+                    }}>
+                      {t('nav.register')}
+                    </Link>
+                  </>
+                )}
+              </div>
+              <LandingPage />
+            </>
+          </PageWrapper>
+        } />
+        <Route path="/login" element={<PageWrapper><AuthPage mode="login" /></PageWrapper>} />
+        <Route path="/register" element={<PageWrapper><AuthPage mode="register" /></PageWrapper>} />
+        <Route path="/join/:token" element={<PageWrapper><JoinPage /></PageWrapper>} />
+        <Route path="/dashboard" element={<PageWrapper><PrivateRoute><DashboardPage /></PrivateRoute></PageWrapper>} />
+        <Route path="/workspace/:id" element={<PageWrapper><PrivateRoute><WorkspacePage /></PrivateRoute></PageWrapper>} />
+>>>>>>> 48106fb (update project)
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

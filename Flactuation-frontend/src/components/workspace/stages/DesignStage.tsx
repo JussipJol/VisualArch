@@ -44,8 +44,23 @@ const TYPE_DEFAULTS: Record<string, { width: number; height: number }> = {
 let nextId = Date.now();
 const uid = () => `el-${++nextId}`;
 
+<<<<<<< HEAD
 export const DesignStage = ({ projectId }: { projectId: string }) => {
   const { design, setDesign, isGenerating, setGenerating } = useWorkspaceStore();
+=======
+const DEFAULT_THEME = {
+  primary: '#6366F1',
+  accent: '#00f2ff',
+  background: '#020617',
+  surface: 'rgba(30,41,59,0.7)',
+  text: '#F8FAFC',
+  borderRadius: 12,
+  fontFamily: 'Inter',
+};
+
+export const DesignStage = ({ projectId }: { projectId: string }) => {
+  const { design, setDesign, isGenerating, setGenerating, setStage, setCode } = useWorkspaceStore();
+>>>>>>> 48106fb (update project)
   const { stream } = useSSE();
 
   const [status, setStatus] = useState('');
@@ -55,18 +70,33 @@ export const DesignStage = ({ projectId }: { projectId: string }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [scale, setScale] = useState(0.6);
   const [zoom, setZoom] = useState(60);
+<<<<<<< HEAD
+=======
+  const [theme, setTheme] = useState(DEFAULT_THEME);
+>>>>>>> 48106fb (update project)
 
   const containerRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
   // Parse design data from store
   const parseDesign = useCallback((data: Record<string, unknown>) => {
+<<<<<<< HEAD
     const d = data as WireframeData;
     if (d.screens && Array.isArray(d.screens) && d.screens.length > 0 && Array.isArray(d.screens[0].elements)) {
+=======
+    const d = data as any;
+    if (d.screens && Array.isArray(d.screens) && d.screens.length > 0) {
+>>>>>>> 48106fb (update project)
       setScreens(d.screens);
       setActiveScreenIdx(0);
       setSelectedId(null);
     }
+<<<<<<< HEAD
+=======
+    if (d.theme) {
+      setTheme({ ...DEFAULT_THEME, ...d.theme });
+    }
+>>>>>>> 48106fb (update project)
   }, []);
 
   useEffect(() => {
@@ -103,6 +133,38 @@ export const DesignStage = ({ projectId }: { projectId: string }) => {
     });
   };
 
+<<<<<<< HEAD
+=======
+  const handleGenerateCode = async () => {
+    if (isGenerating) return;
+    setGenerating(true, 'code');
+    setStatus('Saving design tokens...');
+
+    try {
+      // Save the current wireframe as designSystem so codeGen can read it
+      const designPayload = { screens, theme: (design as any)?.theme || null };
+      await api.patch(`/projects/${projectId}`, { designSystem: designPayload });
+
+      setStatus('Design saved. Generating code...');
+
+      await stream(`/projects/${projectId}/code/generate`, { prompt: '', designSystem: designPayload }, {
+        onStatus: msg => setStatus(msg),
+        onProgress: (stage, file) => setStatus(`${stage}: ${file || '...'}`),
+        onDone: async (data: any) => {
+          if (data.files) setCode(data.files, data.codeId || '');
+          setStatus('');
+          setGenerating(false);
+          setStage('preview');
+        },
+        onError: msg => { setStatus(`Error: ${msg}`); setGenerating(false); },
+      });
+    } catch (err) {
+      setStatus('Failed to save design');
+      setGenerating(false);
+    }
+  };
+
+>>>>>>> 48106fb (update project)
   const activeScreen = screens[activeScreenIdx] ?? null;
 
   const updateElements = (elements: WfElement[]) => {
@@ -210,8 +272,22 @@ export const DesignStage = ({ projectId }: { projectId: string }) => {
             </>
           )}
           <button onClick={handleGenerate} disabled={isGenerating} style={btnGenerate}>
+<<<<<<< HEAD
             {isGenerating ? 'GENERATING...' : screens.length > 0 ? 'REGENERATE' : 'GENERATE WIREFRAME'}
           </button>
+=======
+            {isGenerating && screens.length === 0 ? 'GENERATING...' : screens.length > 0 ? 'REGENERATE' : 'GENERATE WIREFRAME'}
+          </button>
+          {screens.length > 0 && (
+            <button
+              onClick={handleGenerateCode}
+              disabled={isGenerating}
+              style={{ ...btnGenerate, background: isGenerating ? 'transparent' : '#00ffcc', color: isGenerating ? 'rgba(0,255,204,0.5)' : '#000', borderColor: '#00ffcc', opacity: isGenerating ? 0.5 : 1 }}
+            >
+              {isGenerating ? 'GENERATING...' : 'GENERATE CODE →'}
+            </button>
+          )}
+>>>>>>> 48106fb (update project)
         </div>
       </div>
 
@@ -315,6 +391,10 @@ export const DesignStage = ({ projectId }: { projectId: string }) => {
                     elements={activeScreen.elements}
                     selectedId={selectedId}
                     scale={scale}
+<<<<<<< HEAD
+=======
+                    theme={theme}
+>>>>>>> 48106fb (update project)
                     onSelect={setSelectedId}
                     onChange={updateElements}
                     onLabelEdit={setEditingId}

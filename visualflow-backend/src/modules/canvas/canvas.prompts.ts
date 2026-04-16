@@ -62,28 +62,100 @@ const TIER_Y: Record<number, number> = {
   7: 1180, // Monitoring
 };
 
+<<<<<<< HEAD
 export function autoLayout<T extends { x: number; y: number; type: string }>(nodes: T[]): T[] {
   const tierMap: Record<number, T[]> = {};
   
   // Group nodes by tier
+=======
+export function autoLayout<T extends { id: string; x: number; y: number; type: string; dependencies?: string[] }>(
+  nodes: T[],
+  mode: 'standard' | 'tree' | 'spider' = 'standard'
+): T[] {
+  const centerX = 800;
+  const centerY = 600;
+
+  if (mode === 'spider') {
+    // ── Radial Spider Layout ──
+    const radiusStep = 250;
+    const tierMap: Record<number, T[]> = {};
+    nodes.forEach(node => {
+      const tier = TYPE_TO_TIER[node.type] ?? 3;
+      if (!tierMap[tier]) tierMap[tier] = [];
+      tierMap[tier].push(node);
+    });
+
+    return nodes.map(node => {
+      if (node.x !== 0 || node.y !== 0) return node;
+      const tier = TYPE_TO_TIER[node.type] ?? 3;
+      const tierNodes = tierMap[tier];
+      const index = tierNodes.indexOf(node);
+      const angle = (index / tierNodes.length) * 2 * Math.PI + (tier * 0.5);
+      const r = (tier + 1) * radiusStep;
+      return {
+        ...node,
+        x: centerX + Math.cos(angle) * r,
+        y: centerY + Math.sin(angle) * r,
+      };
+    });
+  }
+
+  if (mode === 'tree') {
+    // ── Hierarchical Tree Layout ──
+    const tierMap: Record<number, T[]> = {};
+    nodes.forEach(node => {
+      const tier = TYPE_TO_TIER[node.type] ?? 3;
+      if (!tierMap[tier]) tierMap[tier] = [];
+      tierMap[tier].push(node);
+    });
+
+    const spacingX = 280;
+    const spacingY = 200;
+
+    return nodes.map(node => {
+      if (node.x !== 0 || node.y !== 0) return node;
+      const tier = TYPE_TO_TIER[node.type] ?? 3;
+      const tierNodes = tierMap[tier];
+      const index = tierNodes.indexOf(node);
+      const totalWidth = (tierNodes.length - 1) * spacingX;
+      return {
+        ...node,
+        x: centerX - (totalWidth / 2) + (index * spacingX),
+        y: 100 + tier * spacingY,
+      };
+    });
+  }
+
+  // ── Standard Multi-Tiered Layout ──
+  const tierMap: Record<number, T[]> = {};
+>>>>>>> 48106fb (update project)
   nodes.forEach(node => {
     const tier = TYPE_TO_TIER[node.type] ?? 3;
     if (!tierMap[tier]) tierMap[tier] = [];
     tierMap[tier].push(node);
   });
 
+<<<<<<< HEAD
   const centerX = 800;
   const spacingX = 320; // Expanded horizontal spacing
 
   return nodes.map(node => {
     // Only layout if not already placed (or force if 0,0)
+=======
+  const spacingX = 320; 
+
+  return nodes.map(node => {
+>>>>>>> 48106fb (update project)
     if (node.x !== 0 || node.y !== 0) return node;
 
     const tier = TYPE_TO_TIER[node.type] ?? 3;
     const tierNodes = tierMap[tier];
     const index = tierNodes.indexOf(node);
     
+<<<<<<< HEAD
     // Symmetrical horizontal placement
+=======
+>>>>>>> 48106fb (update project)
     const totalTierWidth = (tierNodes.length - 1) * spacingX;
     const x = centerX - (totalTierWidth / 2) + (index * spacingX);
     const y = TIER_Y[tier] ?? 400;

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 export const PLANNER_SYSTEM_PROMPT = `You are a Lead Software Architect specializing in Full-Stack Distribution and Cloud Native Systems. Your mission is to produce a high-fidelity File Structure Blueprint for a professional split-architecture project.
 
 OBJECTIVES:
@@ -11,10 +12,34 @@ Your response must be a strict JSON object mapping the entire file tree. Ensure 
 
 export const FRONTEND_FILE_PROMPT = (file: { path: string; description: string }, context: string) => 
   `Generate an Elite React component/file for: ${file.path}.
+=======
+export const PLANNER_SYSTEM_PROMPT = `You are a Lead Software Architect specializing in React Single-Page Applications. Your mission is to produce a precise File Structure Blueprint for a professional frontend React application that runs in a Vite + React sandbox.
+
+CRITICAL CONSTRAINTS:
+1. ALL frontend files MUST start with "src/" — for example "src/App.jsx", "src/components/Navbar.jsx". DO NOT use a "frontend/" prefix.
+2. The entry point is ALWAYS "src/App.jsx" (JSX, not TSX). All components must be .jsx files.
+3. Use plain JavaScript (JSX), not TypeScript (.tsx/.ts). The sandbox does not have a TypeScript compiler.
+4. Backend files start with "server/" (e.g., "server/index.js", "server/models/User.js").
+5. Use Tailwind CSS via CDN classes. Do NOT import CSS modules or use @tailwind directives.
+6. Keep the plan focused: 3-6 frontend files (src/App.jsx, src/pages/*, src/components/*) and 2-4 backend files.
+7. NEVER generate vite.config, index.html, main.jsx, package.json — those are provided automatically.
+
+Return ONLY a strict JSON object with this exact shape:
+{
+  "projectName": "kebab-case-name",
+  "frontendFiles": [{"path": "src/App.jsx", "description": "..."}],
+  "backendFiles": [{"path": "server/index.js", "description": "..."}],
+  "configFiles": []
+}`;
+
+export const FRONTEND_FILE_PROMPT = (file: { path: string; description: string }, context: string) => 
+  `Generate a React JSX component for: ${file.path}.
+>>>>>>> 48106fb (update project)
   
   CONTEXT: ${context}
   FILE DESCRIPTION: ${file.description}
   
+<<<<<<< HEAD
   TECHNICAL REQUIREMENTS (30 Sentences Guidance):
   - Use Functional Components with TypeScript (or clean JSX).
   - Implement a highly responsive UI using Tailwind CSS utility classes.
@@ -27,6 +52,21 @@ export const FRONTEND_FILE_PROMPT = (file: { path: string; description: string }
   - If it involves data, use Axios for API calls to the /api endpoint.
   
   Return ONLY raw code. No markdown fences.`;
+=======
+  ABSOLUTE RULES:
+  - Write plain JavaScript JSX (NOT TypeScript). No type annotations, no interfaces, no "as" casts.
+  - Use Tailwind CSS utility classes for ALL styling (className="flex items-center bg-blue-500 p-4").
+  - Do NOT use @tailwind CSS directives, CSS modules, or styled-components.
+  - Import React explicitly: import React from 'react'
+  - Import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom' if routing is needed.
+  - Keep imports to: react, react-router-dom, axios only.
+  - If this is App.jsx: create react-router-dom Routes matching the SCREENS TO GENERATE listed in context.
+  - Apply the exact colors from the UI/UX DESIGN SYSTEM section of the context (primary, accent, bg).
+  - Make the UI visually impressive: use gradient backgrounds, glassmorphism cards, hover transitions.
+  - Export the component as default: export default function ComponentName() { ... }
+
+  Return ONLY raw JSX code. No markdown fences. No TypeScript.`;
+>>>>>>> 48106fb (update project)
 
 export const BACKEND_FILE_PROMPT = (file: { path: string; description: string }, context: string) => 
   `Generate an Industrial-Grade Node.js/Express file for: ${file.path}.
@@ -53,6 +93,11 @@ export const README_PROMPT = (name: string, entities: string[], stack: any) =>
   - High-level Architectural Overview.
   - Detailed Tech Stack (${JSON.stringify(stack)}).
   - Entity-Relationship walkthrough (${entities.join(', ')}).
+<<<<<<< HEAD
   - Setup and Deployment instructions for multi-container environments.
+=======
+  - MANDATORY: Step-by-step Run Instructions (npm install, npm run dev).
+  - Deployment instructions for multi-container environments.
+>>>>>>> 48106fb (update project)
   
   Return only clean Markdown.`;

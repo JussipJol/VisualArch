@@ -6,7 +6,17 @@ import { Types } from 'mongoose';
 
 export const getProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+<<<<<<< HEAD
     const projects = await Project.find({ userId: req.user!.userId }).sort({ updatedAt: -1 });
+=======
+    // Return projects the user owns OR is a collaborator on
+    const projects = await Project.find({
+      $or: [
+        { userId: req.user!.userId },
+        { 'collaborators.userId': new Types.ObjectId(req.user!.userId) },
+      ]
+    }).sort({ updatedAt: -1 });
+>>>>>>> 48106fb (update project)
     res.json({ projects });
   } catch {
     res.status(500).json({ error: 'Failed to fetch projects' });
@@ -35,7 +45,17 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
 
 export const getProject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+<<<<<<< HEAD
     const project = await Project.findOne({ _id: req.params.id, userId: req.user!.userId });
+=======
+    const project = await Project.findOne({
+      _id: req.params.id,
+      $or: [
+        { userId: req.user!.userId },
+        { 'collaborators.userId': new Types.ObjectId(req.user!.userId) },
+      ],
+    });
+>>>>>>> 48106fb (update project)
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
       return;
@@ -48,10 +68,28 @@ export const getProject = async (req: AuthRequest, res: Response): Promise<void>
 
 export const updateProject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+<<<<<<< HEAD
     const { name, description, currentStage } = req.body;
     const project = await Project.findOneAndUpdate(
       { _id: req.params.id, userId: req.user!.userId },
       { ...(name && { name }), ...(description !== undefined && { description }), ...(currentStage && { currentStage }) },
+=======
+    const { name, description, currentStage, designSystem } = req.body;
+    const project = await Project.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        $or: [
+          { userId: req.user!.userId },
+          { 'collaborators.userId': new Types.ObjectId(req.user!.userId) },
+        ],
+      },
+      {
+        ...(name && { name }),
+        ...(description !== undefined && { description }),
+        ...(currentStage && { currentStage }),
+        ...(designSystem !== undefined && { designSystem }),
+      },
+>>>>>>> 48106fb (update project)
       { new: true }
     );
     if (!project) {
@@ -64,6 +102,12 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+<<<<<<< HEAD
+=======
+// PATCH — partial update (same implementation, alias for design system saves)
+export const patchProject = updateProject;
+
+>>>>>>> 48106fb (update project)
 export const deleteProject = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const project = await Project.findOneAndDelete({ _id: req.params.id, userId: req.user!.userId });

@@ -7,11 +7,19 @@ import { connectDB } from './config/database';
 import routes from './routes';
 import { errorHandler } from './middleware/error.middleware';
 import { config } from './config/env';
+<<<<<<< HEAD
+=======
+import passport from './config/passport';
+>>>>>>> 48106fb (update project)
 
 const app = express();
 
 // Security
 app.use(helmet());
+<<<<<<< HEAD
+=======
+app.use(passport.initialize());
+>>>>>>> 48106fb (update project)
 const allowedOrigins = [
   config.clientUrl,
   'http://localhost:5173',

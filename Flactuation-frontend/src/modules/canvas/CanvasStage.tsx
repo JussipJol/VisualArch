@@ -64,7 +64,11 @@ export const CanvasStage = ({ projectId }: { projectId: string }) => {
   const {
     canvasNodes, canvasEdges, canvasMode,
     setCanvas, setCanvasMode, setGenerating, setStage,
+<<<<<<< HEAD
     isGenerating, project,
+=======
+    isGenerating,
+>>>>>>> 48106fb (update project)
   } = useWorkspaceStore();
   const { stream } = useSSE();
 
@@ -118,6 +122,7 @@ export const CanvasStage = ({ projectId }: { projectId: string }) => {
           const iter = data.iteration as { nodes: CanvasNode[]; edges: CanvasEdge[] };
           if (iter?.nodes) setCanvas(iter.nodes, iter.edges || []);
 
+<<<<<<< HEAD
           setStatus('Architecture ready. Generating code...');
 
           await stream(`/projects/${projectId}/code/generate`, { prompt: prompt || project?.name }, {
@@ -133,6 +138,19 @@ export const CanvasStage = ({ projectId }: { projectId: string }) => {
           });
         },
         onError: (msg) => { setStatus(`Canvas Error: ${msg}`); setGenerating(false); },
+=======
+          setStatus('Architecture ready! Advancing to Design...');
+          await new Promise(r => setTimeout(r, 900));
+
+          setStatus('');
+          setPrompt('');
+          setGenerating(false);
+          // Pipeline step 1 complete — move to Design stage.
+          // Design tokens (colors, screens, components) will inform code generation in step 2.
+          setStage('design');
+        },
+        onError: (msg) => { setStatus(`Error: ${msg}`); setGenerating(false); },
+>>>>>>> 48106fb (update project)
       });
     } catch {
       setStatus('Connection lost');
@@ -495,6 +513,7 @@ export const CanvasStage = ({ projectId }: { projectId: string }) => {
           <rect width="100%" height="100%" fill="url(#grid)" />
 
           <g transform={`translate(${view.x},${view.y}) scale(${view.scale})`}>
+<<<<<<< HEAD
             {/* Tier background labels */}
             {canvasNodes.length > 0 && [
               { y: 40,  label: 'CLIENT' },
@@ -510,6 +529,46 @@ export const CanvasStage = ({ projectId }: { projectId: string }) => {
                 {t.label}
               </text>
             ))}
+=======
+            {/* ── Adaptive Measurement Labels ── */}
+            {canvasNodes.length > 0 && (
+              canvasMode === 'spider' ? (
+                // ── Radial Rings (Spider)
+                [1, 2, 3, 4, 5].map(r => (
+                  <g key={r}>
+                    <circle cx={800} cy={600} r={r * 250} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth={1} strokeDasharray="10 5" />
+                    <text x={800} y={600 - r * 250 - 10} fill="rgba(255,255,255,0.1)" fontSize={10} fontFamily="monospace" textAnchor="middle">RADIUS {r * 250}px</text>
+                  </g>
+                ))
+              ) : canvasMode === 'tree' ? (
+                // ── Depth Levels (Tree)
+                [0, 1, 2, 3, 4, 5, 6, 7].map(lvl => (
+                  <g key={lvl}>
+                    <line x1={-2000} y1={100 + lvl * 200 + 40} x2={4000} y2={100 + lvl * 200 + 40} stroke="rgba(255,255,255,0.02)" strokeWidth={1} />
+                    <text x={-20} y={100 + lvl * 200 + 56} fill="rgba(255,255,255,0.05)" fontSize={10} fontFamily="monospace" textAnchor="end" letterSpacing={2}>
+                      DEPTH L{lvl + 1}
+                    </text>
+                  </g>
+                ))
+              ) : (
+                // ── Standard Tiers
+                [
+                  { y: 40,  label: 'CLIENT' },
+                  { y: 160, label: 'CDN / EXTERNAL' },
+                  { y: 280, label: 'GATEWAY' },
+                  { y: 400, label: 'SERVICES' },
+                  { y: 520, label: 'WORKERS' },
+                  { y: 640, label: 'CACHE / QUEUE' },
+                  { y: 760, label: 'DATA' },
+                  { y: 880, label: 'MONITORING' },
+                ].map(t => (
+                  <text key={t.y} x={-10} y={t.y + 16} fill="rgba(255,255,255,0.04)" fontSize={9} fontFamily="monospace" letterSpacing={3} textAnchor="end">
+                    {t.label}
+                  </text>
+                ))
+              )
+            )}
+>>>>>>> 48106fb (update project)
 
             {/* Edges first, nodes on top */}
             {canvasEdges.map(renderEdge)}

@@ -31,6 +31,7 @@ const SUGGESTIONS: Record<string, string[]> = {
 };
 
 export const AIChatPanel = ({ projectId }: { projectId: string }) => {
+<<<<<<< HEAD
   const { chatMessages, addMessage, currentStage, isGenerating, canvasNodes } = useWorkspaceStore();
   const { stream } = useSSE();
   const [input, setInput] = useState('');
@@ -54,6 +55,37 @@ export const AIChatPanel = ({ projectId }: { projectId: string }) => {
 
     let full = '';
     await stream(`/projects/${projectId}/canvas/generate`, { prompt: msg, mode: 'standard' }, {
+=======
+    const { chatMessages, addMessage, currentStage, isGenerating, canvasNodes, canvasMode } = useWorkspaceStore();
+    const { stream } = useSSE();
+    const [input, setInput] = useState('');
+    const [streaming, setStreaming] = useState(false);
+    const [streamBuffer, setStreamBuffer] = useState('');
+    const bottomRef = useRef<HTMLDivElement>(null);
+  
+    useEffect(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages, streamBuffer]);
+  
+    const handleSend = async (text?: string) => {
+      const msg = text || input.trim();
+      if (!msg || streaming || isGenerating) return;
+      setInput('');
+      addMessage({ role: 'user', content: msg });
+      setStreaming(true);
+      setStreamBuffer('');
+  
+      // Only modify canvas if we're on the canvas stage
+      if (currentStage !== 'canvas') {
+        await new Promise(r => setTimeout(r, 400));
+        addMessage({ role: 'assistant', content: `I can modify your architecture on the Canvas stage. Switch to Canvas to make structural changes, or use the stage tools directly for ${currentStage}.` });
+        setStreaming(false);
+        return;
+      }
+  
+      let full = '';
+      await stream(`/projects/${projectId}/canvas/generate`, { prompt: msg, mode: canvasMode }, {
+>>>>>>> 48106fb (update project)
       onChunk: (chunk) => {
         full += chunk;
         setStreamBuffer(full);
@@ -61,7 +93,11 @@ export const AIChatPanel = ({ projectId }: { projectId: string }) => {
       onDone: (data) => {
         const iter = data.iteration as { nodes: unknown[] } | undefined;
         if (iter?.nodes) {
+<<<<<<< HEAD
           addMessage({ role: 'assistant', content: `Generated ${iter.nodes.length} nodes for your architecture.` });
+=======
+          addMessage({ role: 'assistant', content: `Architecture updated with ${iter.nodes.length} nodes.` });
+>>>>>>> 48106fb (update project)
         } else {
           addMessage({ role: 'assistant', content: full || 'Architecture updated.' });
         }

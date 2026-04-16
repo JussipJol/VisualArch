@@ -15,6 +15,16 @@ const ProjectSchema = new Schema<IProject>({
     backend: { type: String, default: '' },
     database: { type: String, default: '' },
   },
+<<<<<<< HEAD
+=======
+  collaborators: {
+    type: [{
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+      role: { type: String, enum: ['editor', 'viewer'], default: 'editor' },
+    }],
+    default: [],
+  },
+>>>>>>> 48106fb (update project)
   isGenerating: { type: Boolean, default: false },
   designSystem: { type: Object, default: null },
 }, { timestamps: true });

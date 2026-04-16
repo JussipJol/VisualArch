@@ -51,7 +51,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
     const user = await User.findOne({ email: email.toLowerCase() });
+<<<<<<< HEAD
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+=======
+    if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
+>>>>>>> 48106fb (update project)
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
@@ -113,3 +117,25 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     res.status(500).json({ error: 'Failed to get user' });
   }
 };
+<<<<<<< HEAD
+=======
+export const oauthSuccess = (req: Request, res: Response): void => {
+  const user = req.user as any;
+  if (!user) {
+    res.redirect(`${config.clientUrl}/login?error=OAuth failed`);
+    return;
+  }
+
+  const { accessToken, refreshToken } = signTokens(user._id.toString(), user.email);
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  // Redirect to frontend with accessToken
+  res.redirect(`${config.clientUrl}/dashboard?token=${accessToken}`);
+};
+>>>>>>> 48106fb (update project)

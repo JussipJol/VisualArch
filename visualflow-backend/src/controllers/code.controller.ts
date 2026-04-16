@@ -10,7 +10,11 @@ import { updateMemory } from '../services/memory.service';
 
 export const generateCode = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id: projectId } = req.params;
+<<<<<<< HEAD
   const { prompt = '' } = req.body;
+=======
+  const { prompt = '', designSystem: overrideDesignSystem } = req.body;
+>>>>>>> 48106fb (update project)
 
   const project = await Project.findOne({ _id: projectId, userId: req.user!.userId });
   if (!project) {
@@ -26,8 +30,11 @@ export const generateCode = async (req: AuthRequest, res: Response): Promise<voi
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+<<<<<<< HEAD
   res.setHeader('Access-Control-Allow-Origin', config.clientUrl);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
+=======
+>>>>>>> 48106fb (update project)
 
   const startTime = Date.now();
 
@@ -54,7 +61,11 @@ export const generateCode = async (req: AuthRequest, res: Response): Promise<voi
       })}\n\n`);
     };
 
+<<<<<<< HEAD
     const files = await generateProjectCode(projectId, nodes, prompt || project.name, onProgress);
+=======
+    const files = await generateProjectCode(projectId, nodes, prompt || project.name, onProgress, overrideDesignSystem);
+>>>>>>> 48106fb (update project)
     const generationTime = Date.now() - startTime;
 
     // Get existing version
@@ -170,3 +181,54 @@ export const getFullCode = async (req: AuthRequest, res: Response): Promise<void
     res.status(500).json({ error: 'Failed to fetch full code' });
   }
 };
+<<<<<<< HEAD
+=======
+export const updateFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id: projectId } = req.params;
+    const { path: filePath, content } = req.body;
+
+    if (!filePath || content === undefined) {
+      res.status(400).json({ error: 'Path and content are required' });
+      return;
+    }
+
+    const project = await Project.findOne({ _id: projectId, userId: req.user!.userId });
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    // Get latest code version
+    const lastCode = await GeneratedCode.findOne({ projectId }).sort({ version: -1 });
+    if (!lastCode) {
+      res.status(404).json({ error: 'No code found to update' });
+      return;
+    }
+
+    // Clone files and update the specific one
+    const newFiles = lastCode.files.map(f => 
+      f.path === filePath ? { ...f, content } : f
+    );
+
+    // Create a new version
+    const newCode = await GeneratedCode.create({
+      projectId,
+      version: lastCode.version + 1,
+      files: newFiles,
+      promptUsed: lastCode.promptUsed,
+      generationTime: 0, // Manual edit
+    });
+
+    res.json({ 
+      success: true, 
+      codeId: newCode._id, 
+      version: newCode.version,
+      files: newCode.files.map(f => ({ path: f.path, language: f.language })) 
+    });
+  } catch (err) {
+    console.error('[Code] Update error:', err);
+    res.status(500).json({ error: 'Failed to update file' });
+  }
+};
+>>>>>>> 48106fb (update project)

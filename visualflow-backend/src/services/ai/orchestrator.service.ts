@@ -38,7 +38,11 @@ export class OrchestratorService {
       'OpenRouter',
       config.openRouterApiKey,
       'https://openrouter.ai/api/v1',
+<<<<<<< HEAD
       'anthropic/claude-3.5-sonnet' // Fixed ID: dots instead of hyphens
+=======
+      'anthropic/claude-3-5-sonnet' // Standard ID with hyphens
+>>>>>>> 48106fb (update project)
     );
 
     this.providers['LastResort'] = new OpenAICompatibleProvider(

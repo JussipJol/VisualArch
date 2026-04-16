@@ -3,8 +3,16 @@ import { IUser } from '../types';
 
 const UserSchema = new Schema<IUser>({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+<<<<<<< HEAD
   passwordHash: { type: String, required: true },
   name: { type: String, required: true, trim: true },
+=======
+  passwordHash: { type: String, required: false },
+  name: { type: String, required: true, trim: true },
+  githubId: { type: String, unique: true, sparse: true },
+  discordId: { type: String, unique: true, sparse: true },
+  googleId: { type: String, unique: true, sparse: true },
+>>>>>>> 48106fb (update project)
   plan: { type: String, enum: ['free', 'pro'], default: 'free' },
 }, { timestamps: true });
 

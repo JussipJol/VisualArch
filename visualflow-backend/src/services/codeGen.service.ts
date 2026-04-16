@@ -26,7 +26,12 @@ export const generateProjectCode = async (
   projectId: string,
   nodes: ICanvasNode[],
   prompt: string,
+<<<<<<< HEAD
   onProgress: (stage: string, file?: string, chunk?: string) => void
+=======
+  onProgress: (stage: string, file?: string, chunk?: string) => void,
+  overrideDesignSystem?: any
+>>>>>>> 48106fb (update project)
 ): Promise<GeneratedFile[]> => {
   const context = await buildContext(projectId);
   const project = await Project.findById(projectId);
@@ -39,12 +44,42 @@ export const generateProjectCode = async (
     dbSchema: n.databaseMetadata
   }));
 
+<<<<<<< HEAD
+=======
+  // Use the injected design system if provided, otherwise fallback to DB
+  const designSystem = overrideDesignSystem || (project?.designSystem as any);
+  const designTheme = designSystem?.theme || null;
+  const designScreens: Array<{ name: string; path: string; elements: Array<{ type: string; label: string }> }> = 
+    designSystem?.screens || [];
+
+  // Build a readable screen summary for the AI prompt
+  const screenSummary = designScreens.length > 0
+    ? designScreens.map((s: any) => 
+        `  - ${s.name} (${s.path}): [${(s.elements || []).map((e: any) => `${e.type}:${e.label}`).join(', ')}]`
+      ).join('\n')
+    : '  (no wireframe screens — generate a reasonable layout based on the architecture)';
+
+  const themeSummary = designTheme
+    ? `Colors: primary=${designTheme.primary || '#6366f1'}, accent=${designTheme.accent || '#10b981'}, bg=${designTheme.background || '#020617'}
+Font: ${designTheme.fontFamily || 'Inter'}
+Border radius: ${designTheme.borderRadius || 12}px`
+    : 'Dark theme: bg=#0f172a, primary=#6366f1, accent=#10b981, text=#f8fafc';
+
+>>>>>>> 48106fb (update project)
   const projectContext = `
     MASTER ARCHITECTURE BLUEPRINT:
     ${JSON.stringify(blueprintDetails, null, 2)}
     
+<<<<<<< HEAD
     UI/UX DESIGN SYSTEM (Figma Tokens):
     ${JSON.stringify(project?.designSystem || 'No design tokens yet', null, 2)}
+=======
+    UI/UX DESIGN SYSTEM:
+    ${themeSummary}
+    
+    SCREENS TO GENERATE (from wireframe):
+${screenSummary}
+>>>>>>> 48106fb (update project)
     
     SYSTEM CONTEXT:
     ${context}
@@ -80,6 +115,7 @@ export const generateProjectCode = async (
   } catch (error) {
     console.error('[CodeGen] Planning failed or returned invalid JSON, using industrial fallback');
     planJSON = {
+<<<<<<< HEAD
       projectName: 'enterprise-app',
       frontendFiles: [
         { path: 'frontend/src/App.tsx', description: 'Root component with React Router and Provisioning' },
@@ -95,6 +131,19 @@ export const generateProjectCode = async (
         { path: 'package.json', description: 'Workspace configuration' },
         { path: 'docker-compose.yml', description: 'Orchestration for mongo/redis' },
       ],
+=======
+      projectName: 'generated-app',
+      frontendFiles: [
+        { path: 'src/App.jsx', description: 'Root React component with routing and main layout' },
+        { path: 'src/components/Navbar.jsx', description: 'Responsive navigation bar with links' },
+        { path: 'src/pages/Dashboard.jsx', description: 'Main dashboard page with data display' },
+      ],
+      backendFiles: [
+        { path: 'server/index.js', description: 'Express server entry with CORS and routes' },
+        { path: 'server/models/User.js', description: 'Mongoose user schema' },
+      ],
+      configFiles: [],
+>>>>>>> 48106fb (update project)
     };
   }
 
@@ -170,12 +219,26 @@ export const generateProjectCode = async (
   };
 
   const lowerPrompt = (prompt + projectContext).toLowerCase();
+<<<<<<< HEAD
   if (lowerPrompt.includes('framer') || lowerPrompt.includes('motion')) dependencies['framer-motion'] = '^11.2.10';
   if (lowerPrompt.includes('lucide') || lowerPrompt.includes('icon')) dependencies['lucide-react'] = '^0.395.0';
   if (lowerPrompt.includes('mongoose') || lowerPrompt.includes('mongodb')) dependencies['mongoose'] = '^8.4.1';
   if (lowerPrompt.includes('bcrypt')) dependencies['bcryptjs'] = '^2.4.3';
   if (lowerPrompt.includes('jwt') || lowerPrompt.includes('token')) dependencies['jsonwebtoken'] = '^9.0.2';
   if (lowerPrompt.includes('zod')) dependencies['zod'] = '^3.23.8';
+=======
+  if (lowerPrompt.includes('framer') || lowerPrompt.includes('motion')) dependencies['framer-motion'] = '^11.3.2';
+  if (lowerPrompt.includes('lucide') || lowerPrompt.includes('icon')) dependencies['lucide-react'] = '^0.400.0';
+  if (lowerPrompt.includes('mongoose') || lowerPrompt.includes('mongodb')) dependencies['mongoose'] = '^8.5.1';
+  if (lowerPrompt.includes('bcrypt')) dependencies['bcryptjs'] = '^2.4.3';
+  if (lowerPrompt.includes('jwt') || lowerPrompt.includes('token')) dependencies['jsonwebtoken'] = '^9.0.2';
+  if (lowerPrompt.includes('zod')) dependencies['zod'] = '^3.23.8';
+  if (lowerPrompt.includes('radix')) dependencies['@radix-ui/react-slot'] = '^1.1.0';
+  if (lowerPrompt.includes('tailwind') || true) {
+    dependencies['tailwind-merge'] = '^2.3.0';
+    dependencies['clsx'] = '^2.1.1';
+  }
+>>>>>>> 48106fb (update project)
 
   files.push({
     path: 'package.json',
@@ -225,6 +288,7 @@ export default defineConfig({
   });
 
   files.push({
+<<<<<<< HEAD
     path: 'src/main.jsx',
     content: `import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -236,6 +300,58 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )`,
+=======
+    path: 'src/index.css',
+    content: `/* Base styles — Tailwind is loaded via CDN in index.html */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #0f172a;
+  color: #f8fafc;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}`,
+    language: 'css',
+  });
+
+  // Ensure src/App.jsx always exists as a valid entry point
+  const hasAppJsx = files.some(f => f.path === 'src/App.jsx' || f.path === 'src/app.jsx');
+  if (!hasAppJsx) {
+    files.push({
+      path: 'src/App.jsx',
+      content: `import React from 'react';
+import './index.css';
+
+export default function App() {
+  return (
+    <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-blue-400 mb-4">${planJSON.projectName || 'Generated App'}</h1>
+        <p className="text-slate-400">Your AI-generated application is ready.</p>
+      </div>
+    </div>
+  );
+}`,
+      language: 'javascript',
+    });
+  }
+
+  files.push({
+    path: 'src/main.jsx',
+    content: `import React from 'react';
+import { createRoot } from 'react-dom/client';
+import './index.css';
+import App from './App.jsx';
+
+createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`,
+>>>>>>> 48106fb (update project)
     language: 'javascript',
   });
 
@@ -246,7 +362,11 @@ createRoot(document.getElementById('root')).render(
     const readme = await aiOrchestrator.executeTask(
       AIModule.WRITER,
       {
+<<<<<<< HEAD
         system: 'You are a technical writer. Generate a clear README.md. Return only markdown.',
+=======
+        system: 'You are a technical writer. Generate a clear README.md. Focus on RUN INSTRUCTIONS. Return only markdown.',
+>>>>>>> 48106fb (update project)
         user: README_PROMPT(planJSON.projectName, entities, { frontend: 'React + Vite + Tailwind', backend: 'Node.js + Express', database: 'MongoDB (Blueprint-defined)' })
       }
     );

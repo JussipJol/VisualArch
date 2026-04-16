@@ -27,8 +27,11 @@ export const generateCanvas = async (req: AuthRequest, res: Response): Promise<v
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+<<<<<<< HEAD
   res.setHeader('Access-Control-Allow-Origin', config.clientUrl);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
+=======
+>>>>>>> 48106fb (update project)
 
   res.write(`data: ${JSON.stringify({ type: 'status', message: 'Initializing AI...' })}\n\n`);
 
