@@ -35,7 +35,6 @@ export const githubCallback = async (req: Request, res: Response): Promise<void>
     const { code } = req.query;
     if (!code) { res.redirect(`${config.clientUrl}/login?error=no_code`); return; }
 
-    // 1. Обменять code на access_token
     const tokenRes = await axios.post(
       'https://github.com/login/oauth/access_token',
       { client_id: config.githubClientId, client_secret: config.githubClientSecret, code },
@@ -44,13 +43,11 @@ export const githubCallback = async (req: Request, res: Response): Promise<void>
     const githubToken = tokenRes.data.access_token;
     if (!githubToken) { res.redirect(`${config.clientUrl}/login?error=no_token`); return; }
 
-    // 2. Получить профиль
     const profileRes = await axios.get('https://api.github.com/user', {
       headers: { Authorization: `Bearer ${githubToken}` },
     });
     const profile = profileRes.data;
 
-    // 3. Получить email (может быть приватным)
     let email = profile.email;
     if (!email) {
       const emailsRes = await axios.get('https://api.github.com/user/emails', {
@@ -61,28 +58,26 @@ export const githubCallback = async (req: Request, res: Response): Promise<void>
     }
     if (!email) { res.redirect(`${config.clientUrl}/login?error=no_email`); return; }
 
-    // 4. Найти или создать юзера
-    let user = await User.findOne({ oauthProvider: 'github', oauthId: String(profile.id) });
+    let user = await User.findOne({
+      oauthAccounts: { $elemMatch: { provider: 'github', id: String(profile.id) } }
+    });
     if (!user) {
       user = await User.findOne({ email: email.toLowerCase() });
       if (user) {
-        user.oauthProvider = 'github';
-        user.oauthId = String(profile.id);
-        user.avatar = profile.avatar_url || null;
+        user.oauthAccounts.push({ provider: 'github', id: String(profile.id) });
+        user.avatar = user.avatar || profile.avatar_url || null;
         await user.save();
       } else {
         user = await User.create({
           email: email.toLowerCase(),
           name: profile.name || profile.login,
           passwordHash: null,
-          oauthProvider: 'github',
-          oauthId: String(profile.id),
+          oauthAccounts: [{ provider: 'github', id: String(profile.id) }],
           avatar: profile.avatar_url || null,
         });
       }
     }
 
-    // 5. Выдать токены и редиректнуть
     const { accessToken, refreshToken } = signTokens(user._id.toString(), user.email);
     setRefreshCookie(res, refreshToken);
     res.redirect(`${config.clientUrl}/oauth/callback?token=${accessToken}`);
@@ -110,7 +105,6 @@ export const googleCallback = async (req: Request, res: Response): Promise<void>
     const { code } = req.query;
     if (!code) { res.redirect(`${config.clientUrl}/login?error=no_code`); return; }
 
-    // 1. Обменять code на токен
     const tokenRes = await axios.post('https://oauth2.googleapis.com/token', {
       client_id: config.googleClientId,
       client_secret: config.googleClientSecret,
@@ -120,30 +114,28 @@ export const googleCallback = async (req: Request, res: Response): Promise<void>
     });
     const googleToken = tokenRes.data.access_token;
 
-    // 2. Получить профиль
     const profileRes = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${googleToken}` },
     });
     const profile = profileRes.data;
     if (!profile.email) { res.redirect(`${config.clientUrl}/login?error=no_email`); return; }
 
-    // 3. Найти или создать юзера
-    let user = await User.findOne({ oauthProvider: 'google', oauthId: String(profile.id) });
+    let user = await User.findOne({
+      oauthAccounts: { $elemMatch: { provider: 'google', id: String(profile.id) } }
+    });
     if (!user) {
-      user = await User.findOne({ email: profile.email.toLowerCase() });
+      user = await User.findOne({ email: profile.email.toLowerCase() }); // ← profile.email, не просто email
       if (user) {
-        user.oauthProvider = 'google';
-        user.oauthId = String(profile.id);
-        user.avatar = profile.picture || null;
+        user.oauthAccounts.push({ provider: 'google', id: String(profile.id) });
+        user.avatar = user.avatar || profile.picture || null; // ← picture, не avatar_url
         await user.save();
       } else {
         user = await User.create({
           email: profile.email.toLowerCase(),
-          name: profile.name,
+          name: profile.name,                                 // ← просто name, нет login
           passwordHash: null,
-          oauthProvider: 'google',
-          oauthId: String(profile.id),
-          avatar: profile.picture || null,
+          oauthAccounts: [{ provider: 'google', id: String(profile.id) }],
+          avatar: profile.picture || null,                    // ← picture, не avatar_url
         });
       }
     }
@@ -174,7 +166,6 @@ export const discordCallback = async (req: Request, res: Response): Promise<void
     const { code } = req.query;
     if (!code) { res.redirect(`${config.clientUrl}/login?error=no_code`); return; }
 
-    // 1. Обменять code на токен
     const tokenRes = await axios.post(
       'https://discord.com/api/oauth2/token',
       new URLSearchParams({
@@ -188,30 +179,32 @@ export const discordCallback = async (req: Request, res: Response): Promise<void
     );
     const discordToken = tokenRes.data.access_token;
 
-    // 2. Получить профиль
     const profileRes = await axios.get('https://discord.com/api/users/@me', {
       headers: { Authorization: `Bearer ${discordToken}` },
     });
     const profile = profileRes.data;
     if (!profile.email) { res.redirect(`${config.clientUrl}/login?error=no_email`); return; }
 
-    // 3. Найти или создать юзера
-    let user = await User.findOne({ oauthProvider: 'discord', oauthId: String(profile.id) });
+    const avatarUrl = profile.avatar
+      ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
+      : null;
+
+    let user = await User.findOne({                           // ← обновлён на $elemMatch
+      oauthAccounts: { $elemMatch: { provider: 'discord', id: String(profile.id) } }
+    });
     if (!user) {
       user = await User.findOne({ email: profile.email.toLowerCase() });
       if (user) {
-        user.oauthProvider = 'discord';
-        user.oauthId = String(profile.id);
-        user.avatar = profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null;
+        user.oauthAccounts.push({ provider: 'discord', id: String(profile.id) });
+        user.avatar = user.avatar || avatarUrl;
         await user.save();
       } else {
         user = await User.create({
           email: profile.email.toLowerCase(),
           name: profile.global_name || profile.username,
           passwordHash: null,
-          oauthProvider: 'discord',
-          oauthId: String(profile.id),
-          avatar: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null,
+          oauthAccounts: [{ provider: 'discord', id: String(profile.id) }],
+          avatar: avatarUrl,
         });
       }
     }

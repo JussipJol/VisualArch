@@ -6,8 +6,13 @@ const UserSchema = new Schema<IUser>({
   passwordHash: { type: String, required: false, default: null },
   name: { type: String, required: true, trim: true },
   plan: { type: String, enum: ['free', 'pro'], default: 'free' },
-  oauthProvider: { type: String, default: null },
-  oauthId: { type: String, default: null },
+  oauthAccounts: {
+    type: [{
+      provider: { type: String, enum: ['github', 'google', 'discord'], required: true },
+      id:       { type: String, required: true },
+    }],
+    default: [],
+  },
   avatar: { type: String, default: null },
 }, { timestamps: true });
 

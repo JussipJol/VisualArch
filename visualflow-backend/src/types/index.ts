@@ -1,15 +1,19 @@
 import { Request } from 'express';
 import { Document, Types } from 'mongoose';
 
+
+export interface IOAuthAccount {
+  provider: 'github' | 'google' | 'discord';
+  id: string;
+}
 export interface IUser extends Document {
   _id: Types.ObjectId;
   email: string;
   passwordHash: string | null;
   name: string;
   plan: 'free' | 'pro';
-  oauthProvider: string | null;
-  oauthId: string | null;
-  avatar: string | null;
+  oauthAccounts: IOAuthAccount[];
+  avatar: string | null;      
   createdAt: Date;
 }
 
@@ -146,7 +150,23 @@ export interface AuthRequest extends Request {
 }
 
 export interface DesignSystem {
-  screens: Array<{ name: string; description: string; path: string }>;
+  screens: Array<{
+    id: string;
+    name: string;
+    description: string;
+    path: string;
+    elements: Array<any>;
+  }>;
+  theme: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    surface: string;
+    background: string;
+    text: string;
+    borderRadius: number;
+    fontFamily: string;
+  };
   components: Array<{
     name: string;
     description: string;
